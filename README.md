@@ -1,5 +1,7 @@
 # Prandtl
 
+[English](#prandtl) | [中文](README_zh.md)
+
 CFD surrogate modeling toolkit. Train fast surrogates for aerodynamic predictions — scikit-learn-like API.
 
 ```python
