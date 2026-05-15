@@ -1,5 +1,7 @@
 # Spec: Prandtl — CFD Surrogate Modeling Toolkit
 
+[English](#) | [中文](SPEC_zh.md)
+
 ## Objective
 
 **What**: A Python toolkit that lets simulation engineers train, validate, and export surrogate models for CFD with minimal code. Three lines: sample → fit → export.
