@@ -56,8 +56,9 @@ def _train_mlp(
     n_iter: int = 1000,
     lr: float = 0.001,
     verbose: bool = False,
+    physics_constraints: list | None = None,
 ) -> None:
-    """Train an MLP surrogate with MSE loss.
+    """Train an MLP surrogate with MSE loss and optional physics constraints.
 
     Parameters
     ----------
@@ -73,6 +74,9 @@ def _train_mlp(
         Learning rate.
     verbose : bool
         If True, print loss every 100 epochs.
+    physics_constraints : list of _PhysicsConstraint or None
+        Optional physics-informed penalty constraints. Each constraint's
+        ``penalty(x, y_pred)`` is added to the total training loss.
     """
     model.train()
 
@@ -82,10 +86,33 @@ def _train_mlp(
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
 
+    # Pre-collect BoundaryValue constraint tensors for efficient training
+    bdy_x: list[torch.Tensor] = []
+    bdy_y: list[torch.Tensor] = []
+    for c in (physics_constraints or []):
+        from ._physics import BoundaryValue
+
+        if isinstance(c, BoundaryValue) and c.points is not None:
+            bdy_x.append(c.points.to(train_x.device, dtype=train_x.dtype))
+            bdy_y.append(c.values.to(train_y.device, dtype=train_y.dtype))
+
     for epoch in range(n_iter):
         optimizer.zero_grad()
         pred = model(train_x)
         loss = criterion(pred, train_y)
+
+        # Boundary value penalties — predict directly at boundary points
+        for bx, by in zip(bdy_x, bdy_y):
+            bdy_pred = model(bx)
+            loss = loss + torch.mean((bdy_pred.squeeze(-1) - by) ** 2)
+
+        # Other physics constraint penalties
+        if physics_constraints:
+            y_flat = pred.squeeze(-1)
+            for constraint in physics_constraints:
+                if not isinstance(constraint, BoundaryValue):
+                    loss = loss + constraint.penalty(train_x, y_flat)
+
         loss.backward()
         optimizer.step()
 

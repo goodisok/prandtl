@@ -69,6 +69,7 @@ class Surrogate:
         n_iter: int = 200,
         lr: float = 0.1,
         verbose: bool = False,
+        physics: list | None = None,
     ) -> "Surrogate":
         """Train the surrogate model on (X, Y) data.
 
@@ -85,11 +86,24 @@ class Surrogate:
             Learning rate for optimizer.
         verbose : bool
             If True, print per-iteration loss during training.
+        physics : list of _PhysicsConstraint or None
+            Physics-informed penalty constraints. Only supported for
+            ``method='mlp'``. Each constraint computes a penalty term from
+            (X_scaled, Y_pred_scaled) and adds it to the training loss.
+
+            Supported constraints: ``Monotonicity``, ``Convexity``,
+            ``BoundaryValue``, ``CustomConstraint``.
 
         Returns
         -------
         Surrogate
             Self, for method chaining.
+
+        Raises
+        ------
+        ValueError
+            If ``physics`` constraints are provided with ``method='gp'`` —
+            GP uses marginal likelihood optimization, not loss-term penalties.
         """
         X = np.asarray(X, dtype=np.float64)
         Y = np.asarray(Y, dtype=np.float64)
@@ -102,6 +116,33 @@ class Surrogate:
             raise ValueError(
                 f"Y must have shape (n, {len(self._outputs)}), got {Y.shape}"
             )
+
+        # Physics constraints are only supported for MLP
+        if physics is not None and self._method == "gp":
+            raise ValueError(
+                "Physics constraints are only supported with method='mlp'. "
+                "GP models use exact marginal likelihood optimization, which "
+                "does not support loss-term penalties."
+            )
+
+        # Scale BoundaryValue constraints to match training data
+        from ._physics import BoundaryValue
+
+        physics_constraints = []
+        if physics is not None:
+            for c in physics:
+                if isinstance(c, BoundaryValue):
+                    # Scale boundary points and values consistently with training data
+                    bdy_pts = np.asarray(c._raw_points, dtype=np.float64)
+                    bdy_vals = np.asarray(c._raw_values, dtype=np.float64)
+                    # Will be re-scaled per-output below; store raw for now
+                    physics_constraints.append(
+                        {"constraint": c, "raw_points": bdy_pts, "raw_values": bdy_vals}
+                    )
+                else:
+                    physics_constraints.append({"constraint": c})
+        else:
+            physics_constraints = []
 
         # Standardize inputs
         self._x_mean = X.mean(axis=0)
@@ -126,7 +167,30 @@ class Surrogate:
                 _train_gp(model, x_tensor, y_tensor, n_iter=n_iter, lr=lr, verbose=verbose)
             else:  # mlp
                 model = _MLP(in_dim=len(self._params))
-                _train_mlp(model, x_tensor, y_tensor, n_iter=n_iter, lr=lr, verbose=verbose)
+
+                # Build per-output physics constraints with scaled boundary values
+                scaled_constraints = []
+                for entry in physics_constraints:
+                    c = entry["constraint"]
+                    if isinstance(c, BoundaryValue):
+                        # Scale boundary points and target values
+                        bdy_scaled = (entry["raw_points"] - self._x_mean) / self._x_std
+                        bdy_val_scaled = (entry["raw_values"] - self._y_mean[name]) / self._y_std[name]
+                        c.points = torch.tensor(bdy_scaled, dtype=torch.float32)
+                        c.values = torch.tensor(bdy_val_scaled, dtype=torch.float32)
+                        scaled_constraints.append(c)
+                    else:
+                        scaled_constraints.append(c)
+
+                _train_mlp(
+                    model,
+                    x_tensor,
+                    y_tensor,
+                    n_iter=n_iter,
+                    lr=lr,
+                    verbose=verbose,
+                    physics_constraints=scaled_constraints if scaled_constraints else None,
+                )
 
             self._models[name] = model
 

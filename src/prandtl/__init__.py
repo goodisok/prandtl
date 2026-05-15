@@ -19,9 +19,21 @@ Quick start::
     print(f"R² = {report['CL']['r2']:.4f}")
 """
 
+from prandtl import analytical
+from prandtl._io import read_foam_forces, read_su2_history
+from prandtl._physics import BoundaryValue, Convexity, CustomConstraint, Monotonicity
 from prandtl._sampling import sample
 from prandtl._surrogate import Surrogate
-from prandtl import analytical
 
-__version__ = "0.1.0"
-__all__ = ["Surrogate", "sample", "analytical"]
+__version__ = "0.2.0"
+__all__ = [
+    "Surrogate",
+    "read_foam_forces",
+    "read_su2_history",
+    "sample",
+    "analytical",
+    "Monotonicity",
+    "Convexity",
+    "BoundaryValue",
+    "CustomConstraint",
+]
