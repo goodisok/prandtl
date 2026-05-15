@@ -8,8 +8,7 @@ import numpy as np
 import pytest
 
 import prandtl as pr
-from prandtl import Monotonicity, Convexity, BoundaryValue, CustomConstraint
-
+from prandtl import BoundaryValue, Convexity, CustomConstraint, Monotonicity
 
 # ------------------------------------------------------------------ #
 #  Monotonicity
@@ -24,16 +23,9 @@ class TestMonotonicity:
         bounds = [(-5.0, 15.0), (0.01, 0.05)]
         X, Y = pr.sample(pr.analytical.cl_flat_plate, bounds=bounds, n=100)
 
-        surr = pr.Surrogate(
-            params=["alpha", "camber"], outputs=["CL"], method="mlp"
-        ).fit(X, Y, n_iter=500, lr=0.01)
-
         Xt, Yt = pr.sample(pr.analytical.cl_flat_plate, bounds=bounds, n=50)
-        r2_no_physics = surr.validate(Xt, Yt)["CL"]["r2"]
 
-        surr_phys = pr.Surrogate(
-            params=["alpha", "camber"], outputs=["CL"], method="mlp"
-        ).fit(
+        surr_phys = pr.Surrogate(params=["alpha", "camber"], outputs=["CL"], method="mlp").fit(
             X,
             Y,
             n_iter=500,
@@ -92,9 +84,9 @@ class TestBoundaryValue:
             points=np.array([[0.0, 0.02]]), values=np.array([0.0]), weight=10.0
         )
 
-        surr = pr.Surrogate(
-            params=["alpha", "camber"], outputs=["CL"], method="mlp"
-        ).fit(X, Y, n_iter=500, lr=0.01, physics=[boundary])
+        surr = pr.Surrogate(params=["alpha", "camber"], outputs=["CL"], method="mlp").fit(
+            X, Y, n_iter=500, lr=0.01, physics=[boundary]
+        )
 
         pred = surr.predict(np.array([[0.0, 0.02]]))
         assert abs(pred[0, 0]) < 0.05, f"CL(0) = {pred[0, 0]:.6f}, expected ~0"
@@ -131,9 +123,7 @@ class TestCustomConstraint:
         bounds = [(-5.0, 15.0), (0.01, 0.05)]
         X, Y = pr.sample(pr.analytical.cl_flat_plate, bounds=bounds, n=40)
 
-        surr = pr.Surrogate(
-            params=["alpha", "camber"], outputs=["CL"], method="mlp"
-        ).fit(
+        pr.Surrogate(params=["alpha", "camber"], outputs=["CL"], method="mlp").fit(
             X,
             Y,
             n_iter=50,

@@ -24,12 +24,17 @@ from prandtl._io import read_foam_forces, read_su2_history
 from prandtl._physics import BoundaryValue, Convexity, CustomConstraint, Monotonicity
 from prandtl._sampling import sample
 from prandtl._surrogate import Surrogate
+from prandtl._validate import cross_validate, learning_curve, metrics, residual_analysis
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     "Surrogate",
+    "cross_validate",
+    "learning_curve",
+    "metrics",
     "read_foam_forces",
     "read_su2_history",
+    "residual_analysis",
     "sample",
     "analytical",
     "Monotonicity",

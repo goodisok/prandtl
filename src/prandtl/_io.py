@@ -16,6 +16,7 @@ import numpy as np  # noqa: I001
 #  Internal helpers
 # --------------------------------------------------------------------------- #
 
+
 def _resolve_foam_path(path: str | Path) -> Path:
     """Resolve *path* to an actual forces data file.
 
@@ -36,8 +37,7 @@ def _resolve_foam_path(path: str | Path) -> Path:
             if candidate_path.is_file():
                 return candidate_path
         raise FileNotFoundError(
-            f"No forces file found in directory {p}. "
-            f"Expected 'coefficient.dat' or 'forces.dat'."
+            f"No forces file found in directory {p}. Expected 'coefficient.dat' or 'forces.dat'."
         )
 
     raise FileNotFoundError(f"Path is neither a file nor a directory: {p}")
@@ -138,8 +138,7 @@ def _load_foam_data(file_path: Path) -> tuple[list[str], np.ndarray]:
             row = [float(t) for t in tokens]
         except ValueError as exc:
             raise ValueError(
-                f"Non-numeric value in {file_path} data line {lineno}: "
-                f"{line.strip()!r}"
+                f"Non-numeric value in {file_path} data line {lineno}: {line.strip()!r}"
             ) from exc
         rows.append(row)
 
@@ -160,6 +159,7 @@ def _load_foam_data(file_path: Path) -> tuple[list[str], np.ndarray]:
 # --------------------------------------------------------------------------- #
 #  Public API
 # --------------------------------------------------------------------------- #
+
 
 def read_foam_forces(
     path: str | Path,
@@ -304,9 +304,7 @@ def read_su2_history(
         try:
             rows.append([float(v) for v in row])
         except ValueError as exc:
-            raise ValueError(
-                f"Non-numeric value in {file_path} line {lineno}: {row!r}"
-            ) from exc
+            raise ValueError(f"Non-numeric value in {file_path} line {lineno}: {row!r}") from exc
 
     n_cols = len(header)
     for i, row in enumerate(rows):

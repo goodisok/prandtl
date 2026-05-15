@@ -7,7 +7,6 @@ methods for generating design points in parameter space.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 import numpy as np
 from scipy.stats import qmc

@@ -6,7 +6,6 @@ training loop. Designed to be used internally by the ``Surrogate`` class.
 
 from __future__ import annotations
 
-import warnings
 from typing import Any
 
 import numpy as np
@@ -70,7 +69,7 @@ class Surrogate:
         lr: float = 0.1,
         verbose: bool = False,
         physics: list | None = None,
-    ) -> "Surrogate":
+    ) -> Surrogate:
         """Train the surrogate model on (X, Y) data.
 
         Parameters
@@ -109,13 +108,9 @@ class Surrogate:
         Y = np.asarray(Y, dtype=np.float64)
 
         if X.ndim != 2 or X.shape[1] != len(self._params):
-            raise ValueError(
-                f"X must have shape (n, {len(self._params)}), got {X.shape}"
-            )
+            raise ValueError(f"X must have shape (n, {len(self._params)}), got {X.shape}")
         if Y.ndim != 2 or Y.shape[1] != len(self._outputs):
-            raise ValueError(
-                f"Y must have shape (n, {len(self._outputs)}), got {Y.shape}"
-            )
+            raise ValueError(f"Y must have shape (n, {len(self._outputs)}), got {Y.shape}")
 
         # Physics constraints are only supported for MLP
         if physics is not None and self._method == "gp":
@@ -175,7 +170,9 @@ class Surrogate:
                     if isinstance(c, BoundaryValue):
                         # Scale boundary points and target values
                         bdy_scaled = (entry["raw_points"] - self._x_mean) / self._x_std
-                        bdy_val_scaled = (entry["raw_values"] - self._y_mean[name]) / self._y_std[name]
+                        bdy_val_scaled = (entry["raw_values"] - self._y_mean[name]) / self._y_std[
+                            name
+                        ]
                         c.points = torch.tensor(bdy_scaled, dtype=torch.float32)
                         c.values = torch.tensor(bdy_val_scaled, dtype=torch.float32)
                         scaled_constraints.append(c)
@@ -298,8 +295,8 @@ class Surrogate:
             )
 
         try:
-            import onnx
-            import onnxruntime
+            import onnx  # noqa: F401
+            import onnxruntime  # noqa: F401
         except ImportError as exc:
             raise ImportError(
                 "onnx and onnxruntime are required for export. "

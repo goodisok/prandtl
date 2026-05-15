@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0] — 2026-05-17
+
+### Added
+- **Validation module** (`_validate.py`): four data-independent validation tools
+  - `metrics(Y_true, Y_pred)` — 7 regression metrics (R², RMSE, MAE, MAPE, max_error, max_relative_error, explained_variance)
+  - `residual_analysis(Y_true, Y_pred)` — Shapiro-Wilk normality test, skewness, kurtosis, max residual index
+  - `cross_validate(surrogate, X, Y, cv=N)` — k-fold CV with per-output aggregation (mean ± std across folds)
+  - `learning_curve(surrogate, X, Y, sizes=[...])` — performance vs training set size curve
+- Public API: `cross_validate`, `learning_curve`, `metrics`, `residual_analysis`
+- 22 new tests (`tests/test_validate.py`)
+- `onnxscript` added to `[export]` extras (required by PyTorch 2.x ONNX export)
+
+### Changed
+- `cross_validate` computes per-fold MAE directly from predictions (not RMSE approximation)
+
 ## [0.2.0] — 2026-05-17
 
 ### Added

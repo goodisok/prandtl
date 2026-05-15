@@ -89,7 +89,7 @@ def _train_mlp(
     # Pre-collect BoundaryValue constraint tensors for efficient training
     bdy_x: list[torch.Tensor] = []
     bdy_y: list[torch.Tensor] = []
-    for c in (physics_constraints or []):
+    for c in physics_constraints or []:
         from ._physics import BoundaryValue
 
         if isinstance(c, BoundaryValue) and c.points is not None:

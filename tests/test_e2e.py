@@ -11,10 +11,10 @@ import pytest
 
 import prandtl as pr
 
-
 # ------------------------------------------------------------------ #
 #  Fixtures
 # ------------------------------------------------------------------ #
+
 
 @pytest.fixture(scope="module")
 def gp_surrogate():

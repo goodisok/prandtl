@@ -12,7 +12,6 @@ import pytest
 
 import prandtl as pr
 
-
 # ------------------------------------------------------------------ #
 #  read_foam_forces
 # ------------------------------------------------------------------ #
@@ -29,9 +28,7 @@ class TestReadFoamForces:
         0.3				0.0241			0.5571			-0.0331
         """)
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".dat", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dat", delete=False) as f:
             f.write(content)
             path = f.name
 
@@ -55,9 +52,7 @@ class TestReadFoamForces:
         0.1				0.0234			0.5612			-0.0342
         """)
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".dat", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dat", delete=False) as f:
             f.write(content)
             path = f.name
 
@@ -72,9 +67,7 @@ class TestReadFoamForces:
             pr.read_foam_forces("/nonexistent/path/forces.dat")
 
     def test_empty_file(self) -> None:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".dat", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dat", delete=False) as f:
             f.write("# just a header\n")
 
         try:
@@ -100,9 +93,7 @@ class TestReadSu2History:
         0.3,3,0.5571,0.0241
         """)
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".csv", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             f.write(content)
             path = f.name
 
@@ -124,9 +115,7 @@ class TestReadSu2History:
     def test_not_enough_columns(self) -> None:
         content = "a,b\n1,2\n"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".csv", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             f.write(content)
             path = f.name
 

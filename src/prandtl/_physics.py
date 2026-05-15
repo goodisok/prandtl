@@ -11,7 +11,7 @@ called without torch.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 
@@ -20,6 +20,7 @@ def _torch():
     """Lazy import; raises clear error if pytorch not installed."""
     try:
         import torch  # type: ignore[import-not-found]
+
         return torch
     except ImportError:
         raise ImportError(
@@ -198,7 +199,9 @@ class BoundaryValue(_PhysicsConstraint):
                 pass
         elif isinstance(points, np.ndarray):
             self._raw_points = points.copy()
-            self._raw_values = values.copy() if isinstance(values, np.ndarray) else np.atleast_1d(values)
+            self._raw_values = (
+                values.copy() if isinstance(values, np.ndarray) else np.atleast_1d(values)
+            )
             self.points = None
             self.values = None
             if self._raw_points.shape[0] != self._raw_values.shape[0]:
@@ -212,7 +215,10 @@ class BoundaryValue(_PhysicsConstraint):
             raise ValueError("points must not be empty")
 
     def __repr__(self) -> str:
-        return f"BoundaryValue(points={self._raw_points}, values={self._raw_values}, weight={self.weight})"
+        return (
+            f"BoundaryValue(points={self._raw_points}, "
+            f"values={self._raw_values}, weight={self.weight})"
+        )
 
 
 class CustomConstraint(_PhysicsConstraint):
