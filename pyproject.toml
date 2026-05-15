@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prandtl"
+version = "0.1.0"
+description = "CFD surrogate modeling toolkit — train, validate, and export surrogate models for aerodynamic predictions."
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "goodisok"}]
+keywords = ["cfd", "surrogate-modeling", "gaussian-process", "aerodynamics", "simulation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+gp = [
+    "gpytorch>=1.10",
+    "torch>=2.0",
+]
+mlp = [
+    "torch>=2.0",
+]
+export = [
+    "onnx>=1.14",
+    "onnxruntime>=1.15",
+]
+all = [
+    "prandtl[gp,mlp,export]",
+]
+dev = [
+    "prandtl[all]",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.3",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
