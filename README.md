@@ -1,7 +1,5 @@
 # Prandtl
 
-[English](#prandtl) | [中文](README_zh.md)
-
 CFD surrogate modeling toolkit. Train fast surrogates for aerodynamic predictions — scikit-learn-like API.
 
 ```python
@@ -22,18 +20,6 @@ print(report)  # {"CL": {"r2": 0.9998, "rmse": 0.0012, "mae": 0.0010}}
 # Export for deployment
 surrogate.export("model.onnx")  # one .onnx file per output
 ```
-
-## The problem
-
-**Question**: How much lift does your drone's rotor generate? → Run a CFD simulation: 40 minutes.
-
-**You actually want 100 different RPM–angle-of-attack combos** → That's 40×100 = 66 hours.
-
-Prandtl's approach: Learn the pattern from 100 sampled points → predict the remaining 10,000 combos in **milliseconds**, error < 0.2%.
-
-Plain English: CFD is an **expensive calculator** — each button press costs 30 minutes. Prandtl **clones that calculator** — the clone returns instant results that are almost indistinguishable from the original.
-
-This is ML at its most practical: not images, not chat, not recommendations — just **learning one function to replace another that's too slow**.
 
 ## Install
 
