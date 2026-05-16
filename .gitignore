@@ -27,4 +27,4 @@ htmlcov/
 Thumbs.db
 
 # MkDocs build output
-site/
+site/.env

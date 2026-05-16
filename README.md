@@ -4,7 +4,7 @@
 
 CFD surrogate modeling toolkit. Train fast surrogates for aerodynamic predictions — scikit-learn-like API.
 
-📖 **[Full Documentation](https://goodisok.github.io/prandtl/)** — install guide, user guide, API reference, examples
+📖 **[Full Documentation](https://prandtl.pages.dev/)** — install guide, user guide, API reference, examples
 
 ```python
 import prandtl as pr
