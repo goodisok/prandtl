@@ -71,6 +71,9 @@ nav:
       - Sampling: api/sampling.md
       - I/O: api/io.md
       - Analytical: api/analytical.md
+  - Design:
+      - SPEC (English): SPEC.md
+      - SPEC (中文): SPEC_zh.md
   - Examples:
       - Thin Airfoil: examples/flat-plate.md
       - Multi-Output: examples/multi-output.md
