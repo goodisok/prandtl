@@ -275,17 +275,27 @@ prandtl/
 
 - **GP ONNX export**: GP models are non-parametric (they need training data for inference) and cannot be exported to ONNX. Use `method='mlp'` if you need exportable surrogates.
 - **No multi-fidelity yet**: Single-fidelity only in this release. Multi-fidelity (Co-Kriging) planned.
-- **CPU only**: CUDA support is available via PyTorch but not yet optimized for Prandtl workflows.
+- **CPU only**: CUDA is available via PyTorch but not yet integrated. On near-term roadmap.
 
 ## Roadmap
 
-- [x] Physics-informed regularization (Monotonicity, Convexity, BoundaryValue)
-- [x] Extended validation suite (cross-validation, learning curves, residual analysis)
+**Done:**
+- [x] GP + MLP dual backends
+- [x] Physics-informed constraints (Monotonicity, Convexity, BoundaryValue)
+- [x] Validation suite (cross-validation, learning curves, residual analysis)
+- [x] CFD data I/O (OpenFOAM, SU2)
+- [x] ONNX export (MLP)
+
+**Near-term (v0.4–v0.5):**
+- [ ] GPU/CUDA support — PyTorch backend already CUDA-capable; needs opt-in flag
+- [ ] Uncertainty quantification API — GP `.predict()` returns predictive variance
+- [ ] Active learning / Bayesian optimization — "where to sample next?"
+- [ ] More analytical benchmark functions (NACA 0012, RAE 2822, etc.)
+
+**Mid-term (v0.6+):**
 - [ ] Multi-fidelity surrogates (Co-Kriging)
-- [ ] Sobolev training (gradient-constrained)
-- [ ] Built-in 2D airfoil parameterization
-- [ ] OpenFOAM case generation + parsing
-- [ ] Isaac Sim force/moment injection plugin
+- [ ] Sobolev training (gradient-constrained fitting)
+- [ ] Additional model backends (Random Forest, Gradient Boosting)
 
 ## License
 

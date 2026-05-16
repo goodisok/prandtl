@@ -277,17 +277,27 @@ prandtl/
 
 - **GP 不支持 ONNX 导出**：高斯过程是非参数方法，推理依赖全部训练数据，无法导出 ONNX。如需可导出模型请使用 `method='mlp'`
 - **暂无多保真**：当前仅支持单保真度。多保真（Co-Kriging）在规划中
-- **仅 CPU**：PyTorch 支持 CUDA，但尚未针对 Prandtl 做 GPU 优化
+- **仅 CPU**：PyTorch 支持 CUDA，尚未集成。列入近期路线图
 
 ## 路线图
 
-- [x] 物理信息正则化（Monotonicity、Convexity、BoundaryValue）
-- [x] 扩展验证套件（交叉验证、学习曲线、残差分析）
+**已完成：**
+- [x] GP + MLP 双后端
+- [x] 物理约束（Monotonicity、Convexity、BoundaryValue）
+- [x] 验证套件（交叉验证、学习曲线、残差分析）
+- [x] CFD 数据读写（OpenFOAM、SU2）
+- [x] ONNX 导出（MLP）
+
+**近期（v0.4–v0.5）：**
+- [ ] GPU/CUDA 支持 — PyTorch 后端已支持 CUDA，仅需添加开关
+- [ ] 不确定度量化 API — GP `.predict()` 返回预测方差
+- [ ] 主动学习 / 贝叶斯优化 — "下一步该在哪里采样？"
+- [ ] 更多解析验证函数（NACA 0012、RAE 2822 等）
+
+**中期（v0.6+）：**
 - [ ] 多保真代理模型（Co-Kriging）
-- [ ] Sobolev 训练（梯度约束）
-- [ ] 内置 2D 翼型参数化
-- [ ] OpenFOAM 算例生成与解析
-- [ ] Isaac Sim 力/力矩注入插件
+- [ ] Sobolev 训练（梯度约束拟合）
+- [ ] 更多模型后端（随机森林、梯度提升）
 
 ## 贡献
 
