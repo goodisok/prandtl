@@ -1,10 +1,41 @@
-# read_foam_forces, read_su2_history
+# I/O
 
-!!! tip "Auto-generated reference coming soon"
-    Full API reference with parameter details will be generated automatically from docstrings.
-    For now, see the [User Guide](../user-guide/quickstart.md) for usage examples.
+Read CFD simulation output into training-ready format.
 
-::: prandtl.io
-    options:
-      show_root_heading: false
-      show_source: true
+## read_foam_forces
+
+```python
+from prandtl import read_foam_forces
+X, Y = read_foam_forces("postProcessing/forces/0/coefficient.dat")
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `filepath` | str | Path to OpenFOAM coefficient.dat |
+
+| Returns | Type | Description |
+|---------|------|-------------|
+| `X` | ndarray (n, p) | Input parameters extracted from file |
+| `Y` | ndarray (n, q) | Aerodynamic coefficients (CL, CD, Cm) |
+
+Reads OpenFOAM's `coefficient.dat` (forces function object output). Automatically detects columns:
+- Inputs: `alpha`, `AoA`, `mach`, `Re`
+- Outputs: `CL`, `CD`, `CMx`, `CMy`, `CMz`
+
+## read_su2_history
+
+```python
+from prandtl import read_su2_history
+X, Y = read_su2_history("history.csv")
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `filepath` | str | Path to SU2 history CSV |
+
+| Returns | Type | Description |
+|---------|------|-------------|
+| `X` | ndarray (n, p) | Input parameters |
+| `Y` | ndarray (n, q) | Aerodynamic coefficients |
+
+Parses SU2's CSV history output. Same column auto-detection as `read_foam_forces`.
