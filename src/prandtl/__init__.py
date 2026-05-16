@@ -30,7 +30,7 @@ from prandtl._surrogate import Surrogate
 from prandtl._tree import GradientBoosting, RandomForest
 from prandtl._validate import cross_validate, learning_curve, metrics, residual_analysis
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 __all__ = [
     "Surrogate",
     "CoKriging",
