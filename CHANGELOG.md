@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0] — 2026-06-01
+
+### Added
+- **GPU/CUDA acceleration** — `Surrogate(device='cuda')` opt-in flag; CPU stays default
+- **Uncertainty quantification API** — `predict_with_uncertainty(X)` returns `(mean, std)` for GP and RF backends
+- **New model backends**: Random Forest (`method='rf'`) and Gradient Boosting (`method='gb'`)
+  - RF provides tree-variance uncertainty (standard deviation across ensemble)
+  - GB supports quantile regression via standalone `GradientBoosting.fit_with_uncertainty()`
+- **Active learning** — `ActiveLearner` Bayesian optimization with batch selection strategies
+- **Multi-fidelity modeling** — `CoKriging` two-level Gaussian process for combining cheap and expensive data
+- **Sobolev training** — `GradientConstraint` for physics-informed gradient matching in MLP
+- **Analytical benchmark functions** — `NACA0012`, `RAE2822`, full suite in `prandtl.analytical`
+- Standalone tree constructors: `prandtl.RandomForest(...)` and `prandtl.GradientBoosting(...)`
+- 87 tests (up from 82)
+
+### Changed
+- RF/GB models save under `_tree.py`; `_surrogate.py` dispatches to them via `method='rf'/'gb'`
+- `predict_with_uncertainty()` now raises `NotImplementedError` for GB (points user to quantile regression)
+- `export()` message generalized from GP-only to all non-MLP backends
+
 ## [0.4.0] — 2026-05-31
 
 ### Fixed

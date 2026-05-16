@@ -46,9 +46,68 @@ pip install prandtl-cfd[export]     # ONNX export support
 pip install prandtl-cfd[all]        # Everything (gp + export)
 ```
 
-## v0.3.0 highlights
+## v0.5.0 highlights
 
-### Cross-validation & metrics (new)
+### New model backends: Random Forest & Gradient Boosting
+
+```python
+# Random Forest — no PyTorch/GPyTorch needed
+surrogate = pr.Surrogate(params=["alpha", "mach"], outputs=["CL", "CD"], method="rf")
+surrogate.fit(X, Y)
+Y_pred = surrogate.predict(X_test)
+
+# RF uncertainty: standard deviation across tree ensemble
+Y_mu, Y_std = surrogate.predict_with_uncertainty(X_test)
+```
+
+### Active learning — "where to sample next?"
+
+```python
+from prandtl import ActiveLearner
+
+learner = ActiveLearner(surrogate, X_pool, strategy="max_std")
+X_next = learner.query(n=10)          # pick the 10 most uncertain points
+surrogate.fit(X_next, Y_new)          # label them and retrain
+```
+
+### Co-Kriging: multi-fidelity surrogate
+
+```python
+from prandtl import CoKriging
+
+ck = CoKriging(params=["alpha"], outputs=["CL"])
+ck.fit(X_cheap, Y_cheap, X_expensive, Y_expensive)
+Y_pred = ck.predict(X_test)
+```
+
+### GPU/CUDA support
+
+```python
+surrogate = pr.Surrogate(params=["alpha"], outputs=["CL"], method="mlp", device="cuda")
+surrogate.fit(X, Y)  # trains on GPU
+```
+
+### More
+
+- **Sobolev training** — `GradientConstraint` for physics-informed gradient matching
+- **Uncertainty quantification** — `predict_with_uncertainty()` for GP and RF
+- **Analytical benchmarks** — `NACA0012`, `RAE2822` added to `prandtl.analytical`
+
+## v0.4.0 highlights
+
+### Sobol sampling (new) + Matern kernels
+
+```python
+# Low-discrepancy Sobol sequences — deterministic, reproducible
+X, Y = pr.sample(func, bounds=[(0, 1), (-2, 2)], n=128, method="sobol")
+
+# GP with Matern kernel variants for different smoothness assumptions
+surrogate = pr.Surrogate(params=["alpha"], outputs=["CL"], method="gp",
+                          gp_kernel="matern52")  # ν=2.5 (smooth)
+# Also: "matern15" (ν=1.5), "matern25" (ν=0.5, rough), "rbf" (default)
+```
+
+### Cross-validation & metrics
 
 ```python
 # K-fold cross-validation — one line
@@ -100,11 +159,15 @@ Prandtl lets you replace expensive CFD simulations with fast ML surrogates — w
 
 | Feature | Description |
 |---------|------------|
-| **Zero CFD required** | Validate your surrogate pipeline with built-in analytical truth functions (thin airfoil theory, cylinder drag, propeller thrust) |
-| **Two backends** | Gaussian Process (`method='gp'`) via GPyTorch and MLP (`method='mlp'`) via PyTorch |
+| **Four backends** | GP (`gp`), MLP (`mlp`), Random Forest (`rf`), Gradient Boosting (`gb`) — no PyTorch needed for tree models |
+| **Uncertainty** | `predict_with_uncertainty()` — GP analytic variance, RF tree-ensemble variance |
+| **Zero CFD required** | Validate your surrogate pipeline with built-in analytical truth functions (thin airfoil theory, cylinder drag, propeller thrust, NACA 0012, RAE 2822) |
+| **Active learning** | `ActiveLearner` — Bayesian optimization for smart sampling |
+| **Multi-fidelity** | `CoKriging` — combine cheap + expensive simulation data |
+| **GPU/CUDA** | `device='cuda'` flag for MLP backend |
 | **Multi-output** | One surrogate predicts CL, CD, CM simultaneously |
 | **Validation suite** | Cross-validation, learning curves, residual analysis, and extended metrics (R², RMSE, MAE, MaxRE, Explained Variance) |
-| **Physics constraints** | Monotonicity, convexity, and boundary value soft constraints during MLP training |
+| **Physics constraints** | Monotonicity, convexity, boundary value, and Sobolev gradient constraints during training |
 | **ONNX export** | Export trained MLP surrogates for deployment in any ONNX runtime |
 | **Sci-kit learn style** | `.fit()`, `.predict()`, `.validate()` — if you know sklearn, you know Prandtl |
 
@@ -265,39 +328,44 @@ prandtl/
 ├── _surrogate.py        # Core Surrogate class (fit/predict/validate/export)
 ├── _gaussian.py         # GPyTorch ExactGP wrapper
 ├── _neural.py           # PyTorch MLP wrapper
+├── _tree.py             # Random Forest & Gradient Boosting (scikit-learn)
+├── _active.py           # Active learning / Bayesian optimization
+├── _co_kriging.py       # Multi-fidelity Co-Kriging
+├── _sobolev.py          # Sobolev gradient constraints
 ├── _validate.py         # Cross-validation, learning curves, residual analysis, metrics
 ├── _physics.py          # Physics-informed constraints (Monotonicity, Convexity, BoundaryValue)
 ├── _sampling.py         # LHS, uniform, Sobol samplers
 ├── _io.py               # CFD data I/O (OpenFOAM forces, SU2 history)
-├── _analytical.py       # Analytical truth functions
+├── _analytical.py       # Analytical truth functions (NACA0012, RAE2822, flat plate, cylinder, propeller)
 └── analytical.py        # Public re-export
 ```
 
 ## Limitations
 
-- **GP ONNX export**: GP models are non-parametric (they need training data for inference) and cannot be exported to ONNX. Use `method='mlp'` if you need exportable surrogates.
-- **No multi-fidelity yet**: Single-fidelity only in this release. Multi-fidelity (Co-Kriging) planned.
-- **CPU only**: CUDA is available via PyTorch but not yet integrated. On near-term roadmap.
+- **GP ONNX export**: GP models are non-parametric and cannot be exported to ONNX. Use `method='mlp'` if you need exportable surrogates.
+- **Tree model export**: RF/GB models (scikit-learn) cannot be exported to ONNX. Use `method='mlp'` for export.
+- **GB uncertainty**: Gradient Boosting uncertainty requires quantile regression. Use `GradientBoosting.fit_with_uncertainty()` directly.
+- **Co-Kriging scale**: Limited to two fidelity levels in this release.
 
 ## Roadmap
 
 **Done:**
-- [x] GP + MLP dual backends
-- [x] Physics-informed constraints (Monotonicity, Convexity, BoundaryValue)
+- [x] GP + MLP + RF + GB quad backends
+- [x] Physics-informed constraints (Monotonicity, Convexity, BoundaryValue, Sobolev gradients)
 - [x] Validation suite (cross-validation, learning curves, residual analysis)
 - [x] CFD data I/O (OpenFOAM, SU2)
 - [x] ONNX export (MLP)
-
-**Near-term (v0.4–v0.5):**
-- [ ] GPU/CUDA support — PyTorch backend already CUDA-capable; needs opt-in flag
-- [ ] Uncertainty quantification API — GP `.predict()` returns predictive variance
-- [ ] Active learning / Bayesian optimization — "where to sample next?"
-- [ ] More analytical benchmark functions (NACA 0012, RAE 2822, etc.)
+- [x] GPU/CUDA support
+- [x] Uncertainty quantification API
+- [x] Active learning / Bayesian optimization
+- [x] Analytical benchmark functions (NACA 0012, RAE 2822, flat plate, cylinder, propeller)
+- [x] Multi-fidelity surrogates (Co-Kriging)
 
 **Mid-term (v0.6+):**
-- [ ] Multi-fidelity surrogates (Co-Kriging)
-- [ ] Sobolev training (gradient-constrained fitting)
-- [ ] Additional model backends (Random Forest, Gradient Boosting)
+- [ ] Multi-level Co-Kriging (3+ fidelity levels)
+- [ ] Adaptive sampling strategies (expected improvement, UCB)
+- [ ] Model interpretability tools (SHAP, partial dependence)
+- [ ] Distributed training for large-scale datasets
 
 ## License
 

@@ -46,6 +46,53 @@ pip install prandtl-cfd[export]     # ONNX 导出支持
 pip install prandtl-cfd[all]        # 全部安装
 ```
 
+## v0.5.0 亮点
+
+### 新模型后端：随机森林 & 梯度提升
+
+```python
+# 随机森林 — 无需 PyTorch/GPyTorch
+surrogate = pr.Surrogate(params=["alpha", "mach"], outputs=["CL", "CD"], method="rf")
+surrogate.fit(X, Y)
+Y_pred = surrogate.predict(X_test)
+
+# RF 不确定度：树集成标准差
+Y_mu, Y_std = surrogate.predict_with_uncertainty(X_test)
+```
+
+### 主动学习 — "下一步该在哪里采样？"
+
+```python
+from prandtl import ActiveLearner
+
+learner = ActiveLearner(surrogate, X_pool, strategy="max_std")
+X_next = learner.query(n=10)          # 选取 10 个最不确定的点
+surrogate.fit(X_next, Y_new)          # 标注并重新训练
+```
+
+### Co-Kriging：多保真代理模型
+
+```python
+from prandtl import CoKriging
+
+ck = CoKriging(params=["alpha"], outputs=["CL"])
+ck.fit(X_cheap, Y_cheap, X_expensive, Y_expensive)
+Y_pred = ck.predict(X_test)
+```
+
+### GPU/CUDA 支持
+
+```python
+surrogate = pr.Surrogate(params=["alpha"], outputs=["CL"], method="mlp", device="cuda")
+surrogate.fit(X, Y)  # 在 GPU 上训练
+```
+
+### 更多
+
+- **Sobolev 训练** — `GradientConstraint` 用于物理信息梯度匹配
+- **不确定度量化** — GP 和 RF 支持 `predict_with_uncertainty()`
+- **解析基准函数** — `prandtl.analytical` 新增 `NACA0012`、`RAE2822`
+
 ## v0.3.0 新功能
 
 ### 交叉验证与评估指标（新增）
@@ -96,13 +143,19 @@ X, Y = read_foam_forces("postProcessing/forces/0/coefficient.dat")
 
 ## 能做什么
 
+Prandtl 让你用快速 ML 代理模型替代昂贵的 CFD 仿真——无需写任何 ML 样板代码。
+
 | 特性 | 说明 |
 |---------|------------|
-| **零 CFD 依赖** | 内置解析真值函数（薄翼型理论、圆柱阻力、螺旋桨推力），无需 CFD 即可验证代理模型管线 |
-| **双后端** | 高斯过程（`method='gp'`，基于 GPyTorch）和 MLP（`method='mlp'`，基于 PyTorch） |
+| **四种后端** | 高斯过程（`gp`）、MLP（`mlp`）、随机森林（`rf`）、梯度提升（`gb`）——树模型无需 PyTorch |
+| **不确定度** | `predict_with_uncertainty()`——GP 解析方差、RF 树集成方差 |
+| **零 CFD 依赖** | 内置解析真值函数（薄翼型理论、圆柱阻力、螺旋桨推力、NACA 0012、RAE 2822），无需 CFD 即可验证代理模型管线 |
+| **主动学习** | `ActiveLearner`——贝叶斯优化智能采样 |
+| **多保真度** | `CoKriging`——融合低精度与高精度仿真数据 |
+| **GPU/CUDA** | MLP 后端支持 `device='cuda'` |
 | **多输出** | 一个代理模型同时预测 CL、CD、CM |
 | **验证套件** | 交叉验证、学习曲线、残差分析、扩展指标（R²/RMSE/MAE/MaxRE/Explained Variance） |
-| **物理约束** | 单调性、凸性、边界值软约束——在 MLP 训练时锁定物理规律 |
+| **物理约束** | 单调性、凸性、边界值、Sobolev 梯度约束——在训练时锁定物理规律 |
 | **ONNX 导出** | 训练好的 MLP 代理模型可导出部署到任意 ONNX 运行时 |
 | **Scikit-learn 风格** | `.fit()`、`.predict()`、`.validate()`——会用 sklearn 就会用 Prandtl |
 
@@ -263,11 +316,15 @@ prandtl/
 ├── _surrogate.py        # 核心 Surrogate 类（fit/predict/validate/export）
 ├── _gaussian.py         # GPyTorch ExactGP 封装
 ├── _neural.py           # PyTorch MLP 封装
+├── _tree.py             # 随机森林 & 梯度提升（scikit-learn）
+├── _active.py           # 主动学习 / 贝叶斯优化
+├── _co_kriging.py       # 多保真 Co-Kriging
+├── _sobolev.py          # Sobolev 梯度约束
 ├── _validate.py         # 交叉验证、学习曲线、残差分析、评估指标
 ├── _physics.py          # 物理约束（Monotonicity、Convexity、BoundaryValue）
 ├── _sampling.py         # LHS、均匀、Sobol 采样器
 ├── _io.py               # CFD 数据读写（OpenFOAM forces、SU2 history）
-├── _analytical.py       # 解析真值函数
+├── _analytical.py       # 解析真值函数（NACA0012、RAE2822、平板、圆柱、螺旋桨）
 └── analytical.py        # 公共导出接口
 ```
 
@@ -278,28 +335,29 @@ prandtl/
 ## 当前局限
 
 - **GP 不支持 ONNX 导出**：高斯过程是非参数方法，推理依赖全部训练数据，无法导出 ONNX。如需可导出模型请使用 `method='mlp'`
-- **暂无多保真**：当前仅支持单保真度。多保真（Co-Kriging）在规划中
-- **仅 CPU**：PyTorch 支持 CUDA，尚未集成。列入近期路线图
+- **树模型不支持 ONNX 导出**：RF/GB 模型（基于 scikit-learn）无法导出 ONNX。如需导出请使用 `method='mlp'`
+- **GB 不确定度**：梯度提升的不确定度量化需要分位数回归。请直接使用 `GradientBoosting.fit_with_uncertainty()`
+- **Co-Kriging 规模**：当前版本仅支持两个保真度级别
 
 ## 路线图
 
 **已完成：**
-- [x] GP + MLP 双后端
-- [x] 物理约束（Monotonicity、Convexity、BoundaryValue）
+- [x] GP + MLP + RF + GB 四种后端
+- [x] 物理约束（Monotonicity、Convexity、BoundaryValue、Sobolev 梯度）
 - [x] 验证套件（交叉验证、学习曲线、残差分析）
 - [x] CFD 数据读写（OpenFOAM、SU2）
 - [x] ONNX 导出（MLP）
-
-**近期（v0.4–v0.5）：**
-- [ ] GPU/CUDA 支持 — PyTorch 后端已支持 CUDA，仅需添加开关
-- [ ] 不确定度量化 API — GP `.predict()` 返回预测方差
-- [ ] 主动学习 / 贝叶斯优化 — "下一步该在哪里采样？"
-- [ ] 更多解析验证函数（NACA 0012、RAE 2822 等）
+- [x] GPU/CUDA 支持
+- [x] 不确定度量化 API
+- [x] 主动学习 / 贝叶斯优化
+- [x] 解析基准函数（NACA 0012、RAE 2822、平板、圆柱、螺旋桨）
+- [x] 多保真代理模型（Co-Kriging）
 
 **中期（v0.6+）：**
-- [ ] 多保真代理模型（Co-Kriging）
-- [ ] Sobolev 训练（梯度约束拟合）
-- [ ] 更多模型后端（随机森林、梯度提升）
+- [ ] 多级 Co-Kriging（3+ 保真度级别）
+- [ ] 自适应采样策略（期望改进 EI、上置信界 UCB）
+- [ ] 模型可解释性工具（SHAP、部分依赖图）
+- [ ] 大规模数据分布式训练
 
 ## 贡献
 

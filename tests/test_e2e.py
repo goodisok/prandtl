@@ -333,7 +333,7 @@ class TestExport:
         """GP models cannot be exported to ONNX (non-parametric)."""
         surrogate, _, _ = gp_surrogate
         out = tmp_path / "model.onnx"
-        with pytest.raises(RuntimeError, match="ONNX export is not supported for Gaussian"):
+        with pytest.raises(RuntimeError, match="ONNX export is only supported for method='mlp'"):
             surrogate.export(str(out))
 
     def test_export_mlp_creates_file(self, mlp_surrogate, tmp_path):
@@ -369,3 +369,60 @@ class TestMultipleOutputs:
 
         assert report["y1"]["r2"] > 0.99, f"y1 R²={report['y1']['r2']:.4f}"
         assert report["y2"]["r2"] > 0.99, f"y2 R²={report['y2']['r2']:.4f}"
+
+
+class TestTreeSurrogate:
+    """Random Forest and Gradient Boosting surrogate backends."""
+
+    @staticmethod
+    def _quadratic(x):
+        """f(x) = x²"""
+        return {"y": float(x**2)}
+
+    def test_rf_surrogate(self):
+        X, Y = pr.sample(self._quadratic, bounds=[(-3, 3)], n=80, seed=42)
+        s = pr.Surrogate(params=["x"], outputs=["y"], method="rf")
+        s.fit(X, Y)
+
+        X_test, Y_test = pr.sample(self._quadratic, bounds=[(-3, 3)], n=30, seed=1)
+        report = s.validate(X_test, Y_test)
+        assert report["y"]["r2"] > 0.9, f"RF R²={report['y']['r2']:.4f}"
+
+    def test_gb_surrogate(self):
+        X, Y = pr.sample(self._quadratic, bounds=[(-3, 3)], n=80, seed=42)
+        s = pr.Surrogate(params=["x"], outputs=["y"], method="gb")
+        s.fit(X, Y)
+
+        X_test, Y_test = pr.sample(self._quadratic, bounds=[(-3, 3)], n=30, seed=1)
+        report = s.validate(X_test, Y_test)
+        assert report["y"]["r2"] > 0.9, f"GB R²={report['y']['r2']:.4f}"
+
+    def test_rf_uncertainty(self):
+        X, Y = pr.sample(self._quadratic, bounds=[(-3, 3)], n=80, seed=42)
+        s = pr.Surrogate(params=["x"], outputs=["y"], method="rf")
+        s.fit(X, Y)
+
+        X_test = np.linspace(-3, 3, 10).reshape(-1, 1)
+        y_mu, y_std = s.predict_with_uncertainty(X_test)
+        assert y_mu.shape == (10, 1)
+        assert y_std.shape == (10, 1)
+        assert np.all(y_std > 0), "uncertainty must be positive"
+
+    def test_gb_uncertainty_raises(self):
+        X, Y = pr.sample(self._quadratic, bounds=[(-3, 3)], n=80, seed=42)
+        s = pr.Surrogate(params=["x"], outputs=["y"], method="gb")
+        s.fit(X, Y)
+        X_test = np.linspace(-3, 3, 5).reshape(-1, 1)
+        with pytest.raises(NotImplementedError, match="quantile regression"):
+            s.predict_with_uncertainty(X_test)
+
+    def test_rf_multi_output(self):
+        X, Y = pr.sample(TestMultipleOutputs.two_output_func, bounds=[(-3, 3)], n=100, seed=42)
+        s = pr.Surrogate(params=["x"], outputs=["y1", "y2"], method="rf")
+        s.fit(X, Y)
+        X_test, Y_test = pr.sample(
+            TestMultipleOutputs.two_output_func, bounds=[(-3, 3)], n=30, seed=1
+        )
+        report = s.validate(X_test, Y_test)
+        assert report["y1"]["r2"] > 0.95
+        assert report["y2"]["r2"] > 0.95

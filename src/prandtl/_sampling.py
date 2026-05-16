@@ -83,8 +83,8 @@ def sample(
     for i in range(n):
         kwargs = dict(zip(param_keys, X[i].tolist()))
         result = func(**kwargs)
-        # Ensure consistent column order
-        sorted_keys = sorted(result.keys())
-        Y_rows.append([result[k] for k in sorted_keys])
+        # Preserve dict insertion order (Python 3.7+ guaranteed)
+        # Consistent across all rows because dict keys are always the same
+        Y_rows.append([result[k] for k in result.keys()])
 
     return X, np.array(Y_rows, dtype=np.float64)

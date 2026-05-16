@@ -100,3 +100,116 @@ def thrust_propeller(rpm: float, diameter: float, pitch: float) -> dict[str, flo
     ct = 0.08 * pitch / diameter
     thrust = ct * rho * n**2 * diameter**4
     return {"T": float(thrust)}
+
+
+def naca0012(alpha: float) -> dict[str, float]:
+    """Lift and drag coefficients for a NACA 0012 airfoil.
+
+    Uses thin airfoil theory with a smooth stall model for lift, and a
+    parabolic drag polar for drag. Valid for incompressible, low-speed flow
+    (Mach < 0.3).
+
+    Parameters
+    ----------
+    alpha : float
+        Angle of attack in degrees. Range: -10° to 20°.
+
+    Returns
+    -------
+    dict
+        ``{"CL": lift_coefficient, "CD": drag_coefficient}``
+
+    Notes
+    -----
+    Lift: :math:`C_L = 2\\pi \\sin(\\alpha_{rad})` below stall, with a
+    smooth Gaussian roll-off after :math:`\\alpha_{stall} \\approx 14^\\circ`.
+
+    Drag: :math:`C_D = C_{D0} + k \\cdot C_L^2` where :math:`C_{D0}=0.008`
+    and :math:`k = 0.05` (typical for NACA 0012 at Re ~ 3×10⁶).
+    """
+    alpha_rad = np.radians(alpha)
+    alpha_stall_rad = np.radians(14.0)  # stall angle for NACA 0012
+
+    # Smooth stall model: CL ramps up linearly, then rolls off
+    cl_linear = 2.0 * np.pi * np.sin(alpha_rad)
+
+    # Gaussian decay factor beyond stall
+    cl = np.where(
+        np.abs(alpha) < 14.0,
+        cl_linear,
+        cl_linear * np.exp(-0.5 * ((np.abs(alpha) - 14.0) / 3.0) ** 2),
+    )
+
+    # Parabolic drag polar
+    cd0 = 0.008
+    k = 0.05
+    cd = cd0 + k * cl**2
+
+    return {"CL": float(cl), "CD": float(cd)}
+
+
+def rae2822(alpha: float, mach: float) -> dict[str, float]:
+    """Lift and drag coefficients for a RAE 2822 supercritical airfoil.
+
+    Includes Prandtl-Glauert compressibility correction for lift and a
+    shock-induced wave drag model for transonic speeds. RAE 2822 is a
+    11% thick supercritical airfoil designed for M ≈ 0.7–0.75 cruise.
+
+    Parameters
+    ----------
+    alpha : float
+        Angle of attack in degrees. Range: -5° to 10°.
+    mach : float
+        Freestream Mach number. Range: 0.1 to 0.85.
+
+    Returns
+    -------
+    dict
+        ``{"CL": lift_coefficient, "CD": drag_coefficient}``
+
+    Notes
+    -----
+    Lift: :math:`C_L = C_{L0} + C_{L\\alpha} \\cdot \\alpha_{rad}`, then
+    Prandtl-Glauert corrected: :math:`C_{L,M} = C_L / \\sqrt{1 - M^2}`.
+    :math:`C_{L0} \\approx 0.15` (camber lift at α=0),
+    :math:`C_{L\\alpha} \\approx 2\\pi` (thin airfoil lift slope).
+
+    Drag: :math:`C_D = C_{D0} + k C_L^2 + C_{D,wave}(M)`, where
+    :math:`C_{D,wave}` is a smooth ramp above the critical Mach number
+    (:math:`M_{crit} \\approx 0.73` for RAE 2822).
+
+    References
+    ----------
+    Cook, P. H., McDonald, M. A., & Firmin, M. C. P. (1979).
+    *Aerofoil RAE 2822 — Pressure Distributions, and Boundary Layer and
+    Wake Measurements.* AGARD AR-138.
+    """
+    alpha_rad = np.radians(alpha)
+
+    # Guard against transonic singularity
+    mach = np.clip(mach, 0.0, 0.95)
+    beta = np.sqrt(np.maximum(1.0 - mach**2, 1e-6))
+
+    # Incompressible lift
+    cl0 = 0.15  # camber lift at zero alpha
+    cl_alpha = 2.0 * np.pi  # thin airfoil lift slope
+    cl_incomp = cl0 + cl_alpha * alpha_rad
+
+    # Prandtl-Glauert compressibility correction
+    cl = cl_incomp / beta
+
+    # Drag components
+    cd0 = 0.0085  # minimum drag coefficient
+    k = 0.045  # induced drag factor
+
+    # Wave drag: smooth ramp above Mcrit ≈ 0.73
+    mcrit = 0.73
+    cd_wave = np.where(
+        mach > mcrit,
+        0.02 * ((mach - mcrit) / (0.85 - mcrit)) ** 3,
+        0.0,
+    )
+
+    cd = cd0 + k * cl**2 + cd_wave
+
+    return {"CL": float(cl), "CD": float(cd)}

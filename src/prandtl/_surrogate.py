@@ -28,11 +28,17 @@ class Surrogate:
     outputs : list of str
         Names of output quantities, e.g. ``['CL', 'CD']``.
     method : str
-        Backend model type: ``'gp'`` (Gaussian Process, default) or ``'mlp'``
-        (multi-layer perceptron).
+        Backend model type: ``'gp'`` (Gaussian Process, default),
+        ``'mlp'`` (multi-layer perceptron), ``'rf'`` (Random Forest),
+        or ``'gb'`` (Gradient Boosting).
     gp_kernel : str or None
         GP kernel type: ``'rbf'`` (default), ``'matern15'``, ``'matern25'``,
         ``'matern52'``. Only used when ``method='gp'``.
+    device : str or torch.device
+        Device to run on: ``'cpu'`` (default) or ``'cuda'`` / ``'cuda:0'``.
+        PyTorch CUDA backend must be available for GPU acceleration. Set to
+        ``'cuda'`` when training on large datasets (1000+ points) with
+        ``method='mlp'`` for significant speedup.
     """
 
     def __init__(
@@ -41,14 +47,16 @@ class Surrogate:
         outputs: list[str],
         method: str = "gp",
         gp_kernel: str | None = "rbf",
+        device: str = "cpu",
     ) -> None:
-        if method not in ("gp", "mlp"):
-            raise ValueError(f"Unknown method: {method!r}. Use 'gp' or 'mlp'.")
+        if method not in ("gp", "mlp", "rf", "gb"):
+            raise ValueError(f"Unknown method: {method!r}. Use 'gp', 'mlp', 'rf', or 'gb'.")
 
         self._params = list(params)
         self._outputs = list(outputs)
         self._method = method
         self._gp_kernel = gp_kernel
+        self._device = torch.device(device)
         self._models: dict[str, Any] = {}  # one model per output
         self._x_mean: np.ndarray | None = None
         self._x_std: np.ndarray | None = None
@@ -118,11 +126,10 @@ class Surrogate:
             )
 
         # Physics constraints are only supported for MLP
-        if physics is not None and self._method == "gp":
+        if physics is not None and self._method in ("gp", "rf", "gb"):
             raise ValueError(
-                "Physics constraints are only supported with method='mlp'. "
-                "GP models use exact marginal likelihood optimization, which "
-                "does not support loss-term penalties."
+                f"Physics constraints are only supported with method='mlp', "
+                f"not '{self._method}'."
             )
 
         # Scale BoundaryValue constraints to match training data
@@ -156,41 +163,54 @@ class Surrogate:
             self._y_mean[name] = float(y_col.mean())
             self._y_std[name] = float(y_col.std(ddof=1))
             if self._y_std[name] < 1e-12:
-                self._y_std[name] = 1.0  # guard against constant output
-            y_scaled = (y_col - self._y_mean[name]) / self._y_std[name]
+                self._y_std[name] = 1.0
 
-            x_tensor = torch.tensor(X_scaled, dtype=torch.float32)
-            y_tensor = torch.tensor(y_scaled, dtype=torch.float32)
+            if self._method in ("rf", "gb"):
+                # Tree models: direct fit on raw data (no scaling needed)
+                y_raw = y_col
+                if self._method == "rf":
+                    from sklearn.ensemble import RandomForestRegressor
+                    model = RandomForestRegressor(
+                        n_estimators=200, random_state=42, n_jobs=-1,
+                    )
+                else:
+                    from sklearn.ensemble import GradientBoostingRegressor
+                    model = GradientBoostingRegressor(
+                        n_estimators=200, max_depth=5, learning_rate=0.05,
+                        random_state=42,
+                    )
+                model.fit(X, y_raw)
+                self._models[name] = model
+                continue
+
+            # GP/MLP: scale and use PyTorch
+            y_scaled = (y_col - self._y_mean[name]) / self._y_std[name]
+            x_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(self._device)
+            y_tensor = torch.tensor(y_scaled, dtype=torch.float32).to(self._device)
 
             if self._method == "gp":
                 model = _ExactGP(x_tensor, y_tensor, kernel=self._gp_kernel or "rbf")
+                model = model.to(self._device)
                 _train_gp(model, x_tensor, y_tensor, n_iter=n_iter, lr=lr, verbose=verbose)
             else:  # mlp
-                model = _MLP(in_dim=len(self._params))
+                model = _MLP(in_dim=len(self._params)).to(self._device)
 
                 # Build per-output physics constraints with scaled boundary values
                 scaled_constraints = []
                 for entry in physics_constraints:
                     c = entry["constraint"]
                     if isinstance(c, BoundaryValue):
-                        # Scale boundary points and target values
                         bdy_scaled = (entry["raw_points"] - self._x_mean) / self._x_std
-                        bdy_val_scaled = (entry["raw_values"] - self._y_mean[name]) / self._y_std[
-                            name
-                        ]
-                        c.points = torch.tensor(bdy_scaled, dtype=torch.float32)
-                        c.values = torch.tensor(bdy_val_scaled, dtype=torch.float32)
+                        bdy_val_scaled = (entry["raw_values"] - self._y_mean[name]) / self._y_std[name]
+                        c.points = torch.tensor(bdy_scaled, dtype=torch.float32).to(self._device)
+                        c.values = torch.tensor(bdy_val_scaled, dtype=torch.float32).to(self._device)
                         scaled_constraints.append(c)
                     else:
                         scaled_constraints.append(c)
 
                 _train_mlp(
-                    model,
-                    x_tensor,
-                    y_tensor,
-                    n_iter=n_iter,
-                    lr=lr,
-                    verbose=verbose,
+                    model, x_tensor, y_tensor,
+                    n_iter=n_iter, lr=lr, verbose=verbose,
                     physics_constraints=scaled_constraints if scaled_constraints else None,
                 )
 
@@ -216,22 +236,107 @@ class Surrogate:
 
         X = np.asarray(X, dtype=np.float64)
         X_scaled = (X - self._x_mean) / self._x_std
-        x_tensor = torch.tensor(X_scaled, dtype=torch.float32)
+        x_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(self._device)
 
         preds = []
         for name in self._outputs:
             model = self._models[name]
+
+            if self._method in ("rf", "gb"):
+                # Tree models: direct prediction on raw data
+                y_pred = model.predict(X)
+                preds.append(y_pred.ravel())
+                continue
+
             model.eval()
+            x_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(self._device)
             with torch.no_grad():
                 if self._method == "gp":
-                    y_pred_scaled = model(x_tensor).mean.numpy()
+                    y_pred_scaled = model(x_tensor).mean.cpu().numpy()
                 else:
-                    y_pred_scaled = model(x_tensor).numpy()
+                    y_pred_scaled = model(x_tensor).cpu().numpy()
             # Un-standardize
             y_pred = y_pred_scaled * self._y_std[name] + self._y_mean[name]
             preds.append(y_pred.ravel())
 
         return np.column_stack(preds)
+
+    def predict_with_uncertainty(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Return predictive mean and standard deviation.
+
+        For Gaussian Process (``method='gp'``), the predictive distribution is
+        a full Gaussian — the standard deviation captures model uncertainty
+        (epistemic uncertainty), growing in regions far from training data.
+
+        For MLP (``method='mlp'``), this is not yet supported because a single
+        deterministic forward pass has no built-in uncertainty estimate.
+        Use ``method='gp'`` or ensemble-based approaches for uncertainty.
+
+        Parameters
+        ----------
+        X : ndarray of shape (n_samples, n_params)
+            Input points to predict at.
+
+        Returns
+        -------
+        Y_mean : ndarray of shape (n_samples, n_outputs)
+            Predictive mean — same as ``predict()``.
+        Y_std : ndarray of shape (n_samples, n_outputs)
+            Predictive standard deviation (one sigma). Values are in the
+            original output scale (un-standardized).
+
+        Raises
+        ------
+        NotImplementedError
+            If ``method='mlp'`` — use GP for uncertainty quantification.
+        """
+        self._check_fitted()
+
+        if self._method == "mlp":
+            raise NotImplementedError(
+                "Uncertainty quantification is only available for method='gp' or 'rf'. "
+                "Use method='gp' for principled uncertainty quantification "
+                "or method='rf' for tree-variance estimates."
+            )
+
+        X = np.asarray(X, dtype=np.float64)
+
+        if self._method == "rf":
+            means, stds = [], []
+            for name in self._outputs:
+                model = self._models[name]
+                tree_preds = np.array([tree.predict(X) for tree in model.estimators_])
+                means.append(tree_preds.mean(axis=0))
+                stds.append(tree_preds.std(axis=0, ddof=1))
+            return np.column_stack(means), np.column_stack(stds)
+
+        if self._method == "gb":
+            raise NotImplementedError(
+                "Uncertainty for method='gb' requires quantile regression. "
+                "Use prandtl.GradientBoosting(...).fit_with_uncertainty(X, Y) "
+                "for direct quantile-based uncertainty."
+            )
+
+        # GP: analytic posterior uncertainty
+        X_scaled = (X - self._x_mean) / self._x_std
+        x_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(self._device)
+
+        means = []
+        stds = []
+        for name in self._outputs:
+            model = self._models[name]
+            model.eval()
+            with torch.no_grad():
+                dist = model(x_tensor)
+                y_mean_scaled = dist.mean.cpu().numpy()
+                y_std_scaled = dist.stddev.cpu().numpy()
+            # Un-standardize: mean scaled back, std only needs y_std multiplier
+            y_mean = y_mean_scaled * self._y_std[name] + self._y_mean[name]
+            y_std = y_std_scaled * self._y_std[name]
+            means.append(y_mean.ravel())
+            stds.append(y_std.ravel())
+
+        return np.column_stack(means), np.column_stack(stds)
 
     def validate(self, X_test: np.ndarray, Y_test: np.ndarray) -> dict[str, dict[str, float]]:
         """Compute validation metrics on held-out test data.
@@ -292,11 +397,10 @@ class Surrogate:
         """
         self._check_fitted()
 
-        if self._method == "gp":
+        if self._method != "mlp":
             raise RuntimeError(
-                "ONNX export is not supported for Gaussian Process models. "
-                "GP models are non-parametric and require the full training "
-                "dataset for inference. Use method='mlp' for exportable surrogates."
+                f"ONNX export is only supported for method='mlp', not '{self._method}'. "
+                f"GP models are non-parametric and tree models (rf/gb) are scikit-learn based."
             )
 
         try:
@@ -314,7 +418,7 @@ class Surrogate:
         if not ext:
             ext = ".onnx"
 
-        x_sample = torch.randn(1, len(self._params), dtype=torch.float32)
+        x_sample = torch.randn(1, len(self._params), dtype=torch.float32).to(self._device)
 
         for name in self._outputs:
             model = self._models[name]
@@ -344,5 +448,5 @@ class Surrogate:
         status = "fitted" if self._fitted else "not fitted"
         return (
             f"Surrogate(params={self._params!r}, outputs={self._outputs!r}, "
-            f"method={self._method!r}, {status})"
+            f"method={self._method!r}, device={str(self._device)!r}, {status})"
         )

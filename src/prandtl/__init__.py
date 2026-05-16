@@ -20,23 +20,33 @@ Quick start::
 """
 
 from prandtl import analytical
+from prandtl._active import active_learn, propose_next
+from prandtl._co_kriging import CoKriging
 from prandtl._io import read_foam_forces, read_su2_history
 from prandtl._physics import BoundaryValue, Convexity, CustomConstraint, Monotonicity
 from prandtl._sampling import sample
+from prandtl._sobolev import soboloev
 from prandtl._surrogate import Surrogate
+from prandtl._tree import GradientBoosting, RandomForest
 from prandtl._validate import cross_validate, learning_curve, metrics, residual_analysis
 
-__version__ = "0.3.0"
+__version__ = "0.5.0"
 __all__ = [
     "Surrogate",
+    "CoKriging",
+    "active_learn",
     "cross_validate",
     "learning_curve",
     "metrics",
+    "propose_next",
     "read_foam_forces",
     "read_su2_history",
     "residual_analysis",
     "sample",
+    "soboloev",
     "analytical",
+    "RandomForest",
+    "GradientBoosting",
     "Monotonicity",
     "Convexity",
     "BoundaryValue",
