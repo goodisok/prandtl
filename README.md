@@ -16,7 +16,7 @@ surrogate.fit(X, Y)
 
 # Predict + validate
 Y_pred = surrogate.predict(X_test)
-report = surrogate.validate(X_test, Y_test)
+report = pr.metrics(Y_test, Y_pred)
 print(report)  # {"CL": {"r2": 0.9998, "rmse": 0.0012, "mae": 0.0010}}
 
 # Export for deployment
@@ -38,26 +38,52 @@ This is ML at its most practical: not images, not chat, not recommendations — 
 ## Install
 
 ```bash
-pip install prandtl                # Base (numpy, scipy, torch)
-pip install prandtl[gp]            # Gaussian Process backend (GPyTorch)
-pip install prandtl[export]        # ONNX export support
-pip install prandtl[all]           # Everything (gp + export)
+pip install prandtl-cfd             # Base (numpy, scipy, torch)
+pip install prandtl-cfd[gp]         # Gaussian Process backend (GPyTorch)
+pip install prandtl-cfd[export]     # ONNX export support
+pip install prandtl-cfd[all]        # Everything (gp + export)
 ```
 
-## v0.2.0 highlights
+## v0.3.0 highlights
 
-**Physics constraints** — enforce monotonicity, convexity, or boundary values during MLP training:
+### Cross-validation & metrics (new)
 
 ```python
-from prandtl import Monotonicity, BoundaryValue
+# K-fold cross-validation — one line
+scores = pr.cross_validate(surrogate, X, Y, cv=5)
+# → {"CL": {"mae_mean": 0.012, "mae_std": 0.003, "r2_mean": 0.999, ...}}
+
+# Extended metrics beyond RMSE/R²
+metrics = pr.metrics(Y, Y_pred)
+# → {"CL": {"r2": 0.9996, "rmse": 0.0010, "mae": 0.0008,
+#            "max_re": 0.0034, "explained_variance": 0.9996}}
+
+# Residual diagnostics
+res = pr.residual_analysis(Y, Y_pred)
+# → {"CL": {"shapiro_stat": 0.987, "shapiro_p": 0.42,  # p>0.05 → normal ✓
+#            "skewness": -0.15, "kurtosis": 2.91, "max_residual_idx": 7,
+#            "residuals": array([...])}}
+
+# Learning curve — performance vs training size
+curve = pr.learning_curve(surrogate, X, Y, sizes=[20, 40, 60, 80, 100])
+# → {"train_sizes": [20, 40, 60, 80, 100],
+#     "train_mae": [0.005, 0.008, 0.010, 0.011, 0.012],
+#     "val_mae":   [0.018, 0.014, 0.013, 0.012, 0.012]}
+```
+
+### Physics constraints (v0.2.0+)
+
+```python
+from prandtl import Monotonicity, Convexity, BoundaryValue
 
 surrogate.fit(X, Y, physics=[
-    Monotonicity(param_idx=0, sign=1, weight=0.1),
-    BoundaryValue({"alpha": 0.0}, {"CL": 0.0}, weight=10.0),
+    Monotonicity(param_idx=0, sign=1, weight=0.1),          # CL ↑ monotonically with α
+    BoundaryValue({"alpha": 0.0}, {"CL": 0.0}, weight=10.0), # CL=0 at α=0
+    Convexity(param_idx=0, sign=-1, weight=0.05),            # concave drag polar
 ], n_iter=500, lr=0.01)
 ```
 
-**CFD data I/O** — parse simulation output in one line:
+### CFD data I/O
 
 ```python
 from prandtl import read_foam_forces, read_su2_history
@@ -75,7 +101,8 @@ Prandtl lets you replace expensive CFD simulations with fast ML surrogates — w
 | **Zero CFD required** | Validate your surrogate pipeline with built-in analytical truth functions (thin airfoil theory, cylinder drag, propeller thrust) |
 | **Two backends** | Gaussian Process (`method='gp'`) via GPyTorch and MLP (`method='mlp'`) via PyTorch |
 | **Multi-output** | One surrogate predicts CL, CD, CM simultaneously |
-| **Validation reports** | R², RMSE, MAE per output with a single call |
+| **Validation suite** | Cross-validation, learning curves, residual analysis, and extended metrics (R², RMSE, MAE, MaxRE, Explained Variance) |
+| **Physics constraints** | Monotonicity, convexity, and boundary value soft constraints during MLP training |
 | **ONNX export** | Export trained MLP surrogates for deployment in any ONNX runtime |
 | **Sci-kit learn style** | `.fit()`, `.predict()`, `.validate()` — if you know sklearn, you know Prandtl |
 
@@ -101,7 +128,8 @@ surrogate.fit(X, Y)  # learns the analytical function
 
 # Test on new points
 X_test, Y_test = pr.sample(pr.analytical.cl_flat_plate, bounds=[(-5, 15), (0.01, 0.1)], n=30, seed=99)
-report = surrogate.validate(X_test, Y_test)
+Y_pred = surrogate.predict(X_test)
+report = pr.metrics(Y_test, Y_pred)
 print(report)  # R² > 0.999 on smooth analytical functions
 ```
 
@@ -121,7 +149,8 @@ surrogate = pr.Surrogate(
 surrogate.fit(X, Y, n_iter=3000)
 
 # Single call validates all outputs
-report = surrogate.validate(X_test, Y_test)
+Y_pred = surrogate.predict(X_test)
+report = pr.metrics(Y_test, Y_pred)
 # {"CL": {"r2": 0.9995, "rmse": ..., "mae": ...},
 #  "CD": {"r2": 0.9987, "rmse": ..., "mae": ...}}
 ```
@@ -156,6 +185,66 @@ surrogate = pr.Surrogate(params=["alpha", "mach"], outputs=["CL"], method="gp")
 surrogate.fit(X, Y)  # X: (n_points, n_params), Y: (n_points, n_outputs)
 ```
 
+### 5. Physics-informed training
+
+```python
+from prandtl import Monotonicity, BoundaryValue, Convexity
+
+constraints = [
+    Monotonicity(param_idx=0, sign=1, weight=0.1),
+    # CL must increase with alpha (param_idx=0). sign=+1 enforces monotonic increase.
+    BoundaryValue({"alpha": 0.0}, {"CL": 0.0}, weight=10.0),
+    # At alpha=0°, CL must be 0. High weight = strict constraint.
+    Convexity(param_idx=0, sign=-1, weight=0.05),
+    # Concave relationship (sign=-1) — e.g., drag polar curvature.
+]
+
+surrogate = pr.Surrogate(params=["alpha", "mach"], outputs=["CL", "CD"], method="mlp")
+surrogate.fit(X, Y, physics=constraints, n_iter=500, lr=0.01)
+```
+
+### 6. Cross-validation
+
+```python
+# 5-fold CV: train on 80%, test on 20%, repeat 5 times
+scores = pr.cross_validate(surrogate, X, Y, cv=5, verbose=True)
+print(f"MAE: {scores['CL']['mae_mean']:.4f} ± {scores['CL']['mae_std']:.4f}")
+print(f"R²:  {scores['CL']['r2_mean']:.4f} ± {scores['CL']['r2_std']:.4f}")
+
+# All outputs scored automatically
+# {'CL': {'mae_mean': ..., 'mae_std': ..., 'rmse_mean': ..., 'r2_mean': ..., ...},
+#  'CD': {'mae_mean': ..., ...}}
+```
+
+### 7. Learning curve
+
+```python
+# See how performance scales with training data
+curve = pr.learning_curve(surrogate, X, Y, sizes=[10, 20, 50, 100, 150])
+
+# Interpret: if val_mae plateaus, you have enough data.
+# If train_mae ≪ val_mae, you're overfitting — try simpler model or fewer iterations.
+print(f"Final train MAE: {curve['train_mae'][-1]:.4f}")
+print(f"Final val MAE:   {curve['val_mae'][-1]:.4f}")
+```
+
+### 8. Residual analysis
+
+```python
+res = pr.residual_analysis(Y_test, Y_pred)
+
+# Shapiro-Wilk normality test: p > 0.05 → residuals are normally distributed ✓
+for output in res:
+    r = res[output]
+    print(f"{output}:")
+    print(f"  Shapiro-Wilk p={r['shapiro_p']:.3f} {'✓' if r['shapiro_p'] > 0.05 else '✗'}")
+    print(f"  Skewness={r['skewness']:.3f}, Kurtosis={r['kurtosis']:.3f}")
+    print(f"  Max residual at index {r['max_residual_idx']}")
+
+# High skewness → systematic bias. High kurtosis → outliers.
+# Non-normal residuals → model is missing physics or needs more data.
+```
+
 ## Built-in analytical functions
 
 All return exact mathematical values — perfect for framework validation with zero CFD.
@@ -170,11 +259,14 @@ All return exact mathematical values — perfect for framework validation with z
 
 ```
 prandtl/
-├── __init__.py          # Public API: Surrogate, sample()
+├── __init__.py          # Public API: Surrogate, sample(), cross_validate(), metrics(), ...
 ├── _surrogate.py        # Core Surrogate class (fit/predict/validate/export)
 ├── _gaussian.py         # GPyTorch ExactGP wrapper
 ├── _neural.py           # PyTorch MLP wrapper
+├── _validate.py         # Cross-validation, learning curves, residual analysis, metrics
+├── _physics.py          # Physics-informed constraints (Monotonicity, Convexity, BoundaryValue)
 ├── _sampling.py         # LHS, uniform, Sobol samplers
+├── _io.py               # CFD data I/O (OpenFOAM forces, SU2 history)
 ├── _analytical.py       # Analytical truth functions
 └── analytical.py        # Public re-export
 ```
@@ -183,12 +275,12 @@ prandtl/
 
 - **GP ONNX export**: GP models are non-parametric (they need training data for inference) and cannot be exported to ONNX. Use `method='mlp'` if you need exportable surrogates.
 - **No multi-fidelity yet**: Single-fidelity only in this release. Multi-fidelity (Co-Kriging) planned.
-- **No physics constraints yet**: Pure data-driven fitting. PINN-style physics constraints and Sobolev training planned.
-- **CPU only**: CUDA support is available via PyTorch but not yet optimized.
+- **CPU only**: CUDA support is available via PyTorch but not yet optimized for Prandtl workflows.
 
 ## Roadmap
 
-- [ ] Physics-informed regularization (PDE residuals as loss)
+- [x] Physics-informed regularization (Monotonicity, Convexity, BoundaryValue)
+- [x] Extended validation suite (cross-validation, learning curves, residual analysis)
 - [ ] Multi-fidelity surrogates (Co-Kriging)
 - [ ] Sobolev training (gradient-constrained)
 - [ ] Built-in 2D airfoil parameterization
