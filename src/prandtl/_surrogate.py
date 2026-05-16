@@ -111,6 +111,11 @@ class Surrogate:
             raise ValueError(f"X must have shape (n, {len(self._params)}), got {X.shape}")
         if Y.ndim != 2 or Y.shape[1] != len(self._outputs):
             raise ValueError(f"Y must have shape (n, {len(self._outputs)}), got {Y.shape}")
+        if X.shape[0] != Y.shape[0]:
+            raise ValueError(
+                f"X and Y must have the same number of samples, "
+                f"got X: {X.shape[0]}, Y: {Y.shape[0]}"
+            )
 
         # Physics constraints are only supported for MLP
         if physics is not None and self._method == "gp":
@@ -158,7 +163,7 @@ class Surrogate:
             y_tensor = torch.tensor(y_scaled, dtype=torch.float32)
 
             if self._method == "gp":
-                model = _ExactGP(x_tensor, y_tensor, kernel=self._gp_kernel)
+                model = _ExactGP(x_tensor, y_tensor, kernel=self._gp_kernel or "rbf")
                 _train_gp(model, x_tensor, y_tensor, n_iter=n_iter, lr=lr, verbose=verbose)
             else:  # mlp
                 model = _MLP(in_dim=len(self._params))

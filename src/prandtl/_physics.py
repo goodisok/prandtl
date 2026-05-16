@@ -194,9 +194,6 @@ class BoundaryValue(_PhysicsConstraint):
             self._raw_values = dict(values)
             self.points = None  # filled by Surrogate.fit
             self.values = None
-            if not set(values.keys()).issubset(set(points.keys()) | set(values.keys())):
-                # values and points can share keys or not — only check if dict
-                pass
         elif isinstance(points, np.ndarray):
             self._raw_points = points.copy()
             self._raw_values = (

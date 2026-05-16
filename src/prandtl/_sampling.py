@@ -6,6 +6,7 @@ methods for generating design points in parameter space.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 
 import numpy as np
@@ -70,7 +71,15 @@ def sample(
 
     # Evaluate truth function
     Y_rows = []
-    param_keys = sorted(func.__code__.co_varnames[:d])  # infer names from function signature
+    # Preserve parameter order from function signature (matches bounds order)
+    sig = inspect.signature(func)
+    param_keys = list(sig.parameters.keys())
+    if len(param_keys) != d:
+        raise ValueError(
+            f"Function has {len(param_keys)} parameters but {d} bounds were provided. "
+            f"Parameter names: {param_keys}. Ensure bounds are given in the same order "
+            f"as the function signature."
+        )
     for i in range(n):
         kwargs = dict(zip(param_keys, X[i].tolist()))
         result = func(**kwargs)

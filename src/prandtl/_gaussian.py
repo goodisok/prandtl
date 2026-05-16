@@ -38,10 +38,16 @@ class _ExactGP(gpytorch.models.ExactGP):
         kernel_map = {
             "rbf": gpytorch.kernels.RBFKernel,
             "matern15": lambda: gpytorch.kernels.MaternKernel(nu=1.5),
-            "matern25": lambda: gpytorch.kernels.MaternKernel(nu=2.5),
+            "matern25": lambda: gpytorch.kernels.MaternKernel(nu=0.5),
             "matern52": lambda: gpytorch.kernels.MaternKernel(nu=2.5),
         }
-        base_kernel = kernel_map.get(kernel, gpytorch.kernels.RBFKernel)()
+        kernel_cls = kernel_map.get(kernel)
+        if kernel_cls is None:
+            raise ValueError(
+                f"Unknown gp_kernel: '{kernel}'. "
+                f"Valid options: {list(kernel_map.keys())}."
+            )
+        base_kernel = kernel_cls() if callable(kernel_cls) else kernel_cls()
         self.covar_module = gpytorch.kernels.ScaleKernel(base_kernel)
 
     def forward(self, x: torch.Tensor) -> gpytorch.distributions.MultivariateNormal:

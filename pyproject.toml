@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prandtl-cfd"
-version = "0.3.0"
+version = "0.4.0"
 description = "CFD surrogate modeling toolkit — train, validate, and export surrogate models for aerodynamic predictions."
 license = {text = "MIT"}
 readme = "README.md"
@@ -45,9 +45,8 @@ export = [
     "onnxscript>=0.1",
 ]
 all = [
-    "gpytorch>=1.10",
-    "onnx>=1.14",
-    "onnxruntime>=1.15",
+    "prandtl-cfd[gp]",
+    "prandtl-cfd[export]",
 ]
 dev = [
     "prandtl[all]",

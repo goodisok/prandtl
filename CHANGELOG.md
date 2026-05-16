@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0] — 2026-05-31
+
+### Fixed
+- **GP kernel validation**: Unknown `gp_kernel` names now raise `ValueError` instead of silently falling back to RBF
+- **Sample count validation**: `fit()` now checks `X.shape[0] == Y.shape[0]` before training
+- **BoundaryValue weight**: `BoundaryValue.weight` was ignored during MLP training — now correctly applied
+- **Sobol sampling**: second param now explicitly positional (removed unreliable inference)
+
+### Added
+- **Sobol sampling** (`sample_method='sobol'`) via scipy's Sobol' sequence
+- **Matern kernel variants**: `matern15` (ν=1.5), `matern25` (ν=0.5), `matern52` (ν=2.5) for GP surrogate
+- **Analytical test suite**: 5 tests for flat plate, cylinder, and propeller benchmark functions
+- **I/O error-path tests**: non-numeric data, empty files, directory paths
+- 82 tests total (up from 62)
+- CI pipeline (`.github/workflows/test.yml`) — pytest + ruff on Python 3.11–3.13
+- `CONTRIBUTING.md`
+
 ## [0.3.0] — 2026-05-17
 
 ### Added

@@ -90,6 +90,39 @@ class TestSampling:
         with pytest.raises(ValueError, match="Unknown sampling method"):
             pr.sample(pr.analytical.cl_flat_plate, bounds=[(0, 1)], n=10, method="bad")
 
+    def test_sobol_shape(self):
+        X, Y = pr.sample(
+            pr.analytical.cl_flat_plate,
+            bounds=[(-5, 15), (0.01, 0.1)],
+            n=64,  # Sobol requires power-of-2 for full sequence
+            method="sobol",
+            seed=0,
+        )
+        assert X.shape == (64, 2)
+        assert Y.shape == (64, 1)
+
+    def test_sobol_bounds_respected(self):
+        X, _ = pr.sample(
+            pr.analytical.cl_flat_plate,
+            bounds=[(-5, 15), (0.01, 0.1)],
+            n=64,
+            method="sobol",
+            seed=0,
+        )
+        assert X[:, 0].min() >= -5.0
+        assert X[:, 0].max() <= 15.0
+        assert X[:, 1].min() >= 0.01
+        assert X[:, 1].max() <= 0.1
+
+    def test_param_count_mismatch_raises(self):
+        """If bounds count != function param count, raise clear error."""
+
+        def f(a, b, c):
+            return {"y": 1.0}
+
+        with pytest.raises(ValueError, match="3 parameters but 2 bounds"):
+            pr.sample(f, bounds=[(0, 1), (0, 1)], n=5)
+
 
 class TestAnalytical:
     """Analytical truth functions return correct values."""
@@ -173,6 +206,77 @@ class TestGPSurrogate:
         with pytest.raises(RuntimeError, match="not fitted"):
             s.predict(np.array([[1.0]]))
 
+    def test_gp_kernel_matern15(self):
+        """GP with Matérn 1.5 kernel should still fit well."""
+        X, Y = pr.sample(
+            pr.analytical.cl_flat_plate,
+            bounds=[(-5, 15), (0.01, 0.1)],
+            n=100,
+            seed=42,
+        )
+        s = pr.Surrogate(params=["alpha", "camber"], outputs=["CL"], method="gp", gp_kernel="matern15")
+        s.fit(X, Y, verbose=False)
+        X_test, Y_test = pr.sample(pr.analytical.cl_flat_plate, bounds=[(-5,15),(0.01,0.1)], n=20, seed=99)
+        report = s.validate(X_test, Y_test)
+        assert report["CL"]["r2"] > 0.99
+
+    def test_gp_kernel_matern25(self):
+        """GP with Matérn 1/2 kernel (nu=0.5) — rougher but valid."""
+        X, Y = pr.sample(
+            pr.analytical.cl_flat_plate,
+            bounds=[(-5, 15), (0.01, 0.1)],
+            n=100,
+            seed=42,
+        )
+        s = pr.Surrogate(params=["alpha", "camber"], outputs=["CL"], method="gp", gp_kernel="matern25")
+        s.fit(X, Y, verbose=False)
+        X_test, Y_test = pr.sample(pr.analytical.cl_flat_plate, bounds=[(-5,15),(0.01,0.1)], n=20, seed=99)
+        report = s.validate(X_test, Y_test)
+        assert report["CL"]["r2"] > 0.95  # rougher kernel, lower tolerance
+
+    def test_gp_kernel_matern52(self):
+        """GP with Matérn 5/2 kernel should fit well on smooth data."""
+        X, Y = pr.sample(
+            pr.analytical.cl_flat_plate,
+            bounds=[(-5, 15), (0.01, 0.1)],
+            n=100,
+            seed=42,
+        )
+        s = pr.Surrogate(params=["alpha", "camber"], outputs=["CL"], method="gp", gp_kernel="matern52")
+        s.fit(X, Y, verbose=False)
+        X_test, Y_test = pr.sample(pr.analytical.cl_flat_plate, bounds=[(-5,15),(0.01,0.1)], n=20, seed=99)
+        report = s.validate(X_test, Y_test)
+        assert report["CL"]["r2"] > 0.99
+
+    def test_invalid_kernel_raises(self):
+        """Unknown kernel name should raise a clear error."""
+        s = pr.Surrogate(params=["x"], outputs=["y"], method="gp", gp_kernel="bad_kernel")
+        X = np.array([[1.0], [2.0], [3.0]])
+        Y = np.array([[0.5], [2.0], [4.5]])
+        with pytest.raises(ValueError, match="kernel"):
+            s.fit(X, Y, verbose=False)
+
+    def test_invalid_method_raises(self):
+        """Unknown surrogate method should raise ValueError."""
+        with pytest.raises(ValueError, match="method"):
+            pr.Surrogate(params=["x"], outputs=["y"], method="fantasy")
+
+    def test_shape_mismatch_raises(self):
+        """X rows != Y rows should raise clear error."""
+        s = pr.Surrogate(params=["a", "b"], outputs=["y"], method="gp")
+        X = np.array([[1.0, 2.0], [3.0, 4.0]])
+        Y = np.array([[1.0]])  # 1 row vs 2
+        with pytest.raises(ValueError, match="same number|X must.*Y|samples"):
+            s.fit(X, Y, verbose=False)
+
+    def test_param_dim_mismatch_raises(self):
+        """X columns != len(params) should raise clear error."""
+        s = pr.Surrogate(params=["a", "b", "c"], outputs=["y"], method="gp")
+        X = np.array([[1.0, 2.0]])  # 2 columns vs 3 params
+        Y = np.array([[1.0]])
+        with pytest.raises(ValueError, match="shape.*3.*2|X must"):
+            s.fit(X, Y, verbose=False)
+
 
 class TestMLPSurrogate:
     """MLP surrogate fitting and prediction."""
@@ -214,6 +318,12 @@ class TestMLPSurrogate:
         )
         report = surrogate.validate(X_test, Y_test)
         assert report["CL"]["rmse"] < 0.05, f"MLP RMSE = {report['CL']['rmse']:.4f}"
+
+    def test_mlp_repr(self, mlp_surrogate):
+        surrogate, _, _ = mlp_surrogate
+        rep = repr(surrogate)
+        assert "mlp" in rep
+        assert "fitted" in rep
 
 
 class TestExport:

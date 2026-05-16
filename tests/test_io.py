@@ -76,10 +76,25 @@ class TestReadFoamForces:
         finally:
             Path(f.name).unlink()
 
+    def test_non_numeric_data(self) -> None:
+        """Non-numeric values should raise ValueError."""
+        content = textwrap.dedent("""\
+        # Time  \tCd  \tCl
+        0.1\t0.5\tabc
+        """)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".dat", delete=False) as f:
+            f.write(content)
+            path = f.name
+        try:
+            with pytest.raises(ValueError, match="non-numeric|numeric|cannot|parse|invalid"):
+                pr.read_foam_forces(path)
+        finally:
+            Path(path).unlink()
 
-# ------------------------------------------------------------------ #
-#  read_su2_history
-# ------------------------------------------------------------------ #
+    def test_directory_not_file_raises(self) -> None:
+        """Passing a directory path should raise an error."""
+        with pytest.raises((IsADirectoryError, FileNotFoundError, OSError)):
+            pr.read_foam_forces("/tmp")
 
 
 class TestReadSu2History:
@@ -122,5 +137,30 @@ class TestReadSu2History:
         try:
             X, Y, params, outputs = pr.read_su2_history(path)
             assert Y.shape[1] == 1, "Should have just 1 output column"
+        finally:
+            Path(path).unlink()
+
+    def test_empty_file_raises(self) -> None:
+        """Empty CSV should raise ValueError."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+            f.write("")
+
+        try:
+            with pytest.raises(ValueError, match="empty"):
+                pr.read_su2_history(f.name)
+        finally:
+            Path(f.name).unlink()
+
+    def test_non_numeric_data_raises(self) -> None:
+        """Non-numeric rows should raise ValueError."""
+        content = '"Time","Iter","CL"\n1,2,abc\n'
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+            f.write(content)
+            path = f.name
+
+        try:
+            with pytest.raises(ValueError, match="non-numeric|numeric|cannot|parse|invalid"):
+                pr.read_su2_history(path)
         finally:
             Path(path).unlink()

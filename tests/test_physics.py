@@ -102,6 +102,27 @@ class TestBoundaryValue:
         c = BoundaryValue(points=np.array([[0.0, 0.02]]), values=np.array([0.0]))
         assert "BoundaryValue" in repr(c)
 
+    def test_dict_constructor(self) -> None:
+        """BoundaryValue should accept dict-style points and values."""
+        constraint = BoundaryValue(
+            points={"alpha": 0.0, "camber": 0.02},
+            values={"CL": 0.0},
+            weight=10.0,
+        )
+        assert constraint.weight == 10.0
+        assert isinstance(constraint._raw_points, dict)
+        assert constraint._raw_points == {"alpha": 0.0, "camber": 0.02}
+
+    def test_empty_dict_raises(self) -> None:
+        """Empty points dict should raise ValueError."""
+        with pytest.raises(ValueError, match="must not be empty"):
+            BoundaryValue(points={}, values={"CL": 0.0})
+
+    def test_non_dict_array_raises(self) -> None:
+        """Non-dict, non-array input should raise TypeError."""
+        with pytest.raises(TypeError, match="dict or numpy"):
+            BoundaryValue(points=42, values=np.array([0.0]))
+
 
 # ------------------------------------------------------------------ #
 #  CustomConstraint
@@ -132,6 +153,55 @@ class TestCustomConstraint:
         )
 
         assert call_count[0] > 0, "Custom constraint was never called"
+
+
+class TestConvexityIntegration:
+    """Test convexity constraint actually improves fit on convex data."""
+
+    @staticmethod
+    def parabola(a: float) -> dict[str, float]:
+        """y = a² — convex function."""
+        return {"y": a**2}
+
+    def test_convexity_on_parabola(self) -> None:
+        """MLP with convexity constraint should fit a parabola well."""
+        X, Y = pr.sample(self.parabola, bounds=[(-3, 3)], n=80, seed=0)
+
+        surr = pr.Surrogate(params=["a"], outputs=["y"], method="mlp").fit(
+            X,
+            Y,
+            n_iter=2000,
+            lr=0.01,
+            physics=[Convexity(param_idx=0, weight=0.1)],
+        )
+        X_test, Y_test = pr.sample(self.parabola, bounds=[(-3, 3)], n=30, seed=1)
+        report = surr.validate(X_test, Y_test)
+        assert report["y"]["r2"] > 0.99, f"R² with convexity = {report['y']['r2']:.4f}"
+
+
+class TestMultiOutputPhysics:
+    """Multi-output MLP with physics constraints."""
+
+    @staticmethod
+    def lift_drag(alpha: float) -> dict[str, float]:
+        """CL = α, CD = 0.01 + 0.01α² — CD is convex in α."""
+        return {"CL": alpha, "CD": 0.01 + 0.01 * alpha**2}
+
+    def test_multi_output_with_monotonicity(self) -> None:
+        """Monotonicity on CL should not hurt CD prediction."""
+        X, Y = pr.sample(self.lift_drag, bounds=[(-5, 10)], n=100, seed=0)
+
+        surr = pr.Surrogate(params=["alpha"], outputs=["CL", "CD"], method="mlp").fit(
+            X,
+            Y,
+            n_iter=2000,
+            lr=0.01,
+            physics=[Monotonicity(param_idx=0, sign=1, weight=0.1)],
+        )
+        X_test, Y_test = pr.sample(self.lift_drag, bounds=[(-5, 10)], n=30, seed=1)
+        report = surr.validate(X_test, Y_test)
+        assert report["CL"]["r2"] > 0.99, f"CL R² = {report['CL']['r2']:.4f}"
+        assert report["CD"]["r2"] > 0.99, f"CD R² = {report['CD']['r2']:.4f}"
 
 
 # ------------------------------------------------------------------ #
