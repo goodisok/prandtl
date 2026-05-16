@@ -6,7 +6,8 @@
 pip install prandtl-cfd             # base (numpy, scipy, torch)
 pip install prandtl-cfd[gp]         # Gaussian Process backend (GPyTorch)
 pip install prandtl-cfd[export]     # ONNX export support
-pip install prandtl-cfd[all]        # everything (gp + export)
+pip install prandtl-cfd[tree]       # 树模型后端 (Random Forest / Gradient Boosting)
+pip install prandtl-cfd[all]        # 全部功能 (gp + export + tree)
 ```
 
 ## Extras
@@ -15,8 +16,9 @@ pip install prandtl-cfd[all]        # everything (gp + export)
 |-------|-----------------|------------------|
 | *none* | numpy, scipy, torch | Sampling + MLP training + metrics |
 | `[gp]` | GPyTorch | Gaussian Process surrogates |
-| `[export]` | onnx, onnxruntime | Deploying MLP surrogates |
-| `[all]` | gp + export | Everything |
+| `[export]` | onnx, onnxruntime | 部署 MLP 代理模型 |
+| `[tree]` | scikit-learn | Random Forest / Gradient Boosting 后端 |
+| `[all]` | gp + export + tree | 全部功能 |
 
 ## Check installation
 

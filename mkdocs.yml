@@ -59,6 +59,11 @@ nav:
       - Physics Constraints: user-guide/physics.md
       - Export: user-guide/export.md
       - CFD Data I/O: user-guide/io.md
+      - GPU训练: user-guide/gpu-training.md
+      - 树模型后端: user-guide/tree-backends.md
+      - 主动学习: user-guide/active-learning.md
+      - Co-Kriging多保真: user-guide/co-kriging.md
+      - Sobolev约束: user-guide/sobolev-training.md
   - API Reference:
       - Surrogate: api/surrogate.md
       - Validation: api/validation.md
@@ -71,6 +76,8 @@ nav:
       - Multi-Output: examples/multi-output.md
       - Physics-Constrained: examples/physics-constrained.md
       - Full Validation Pipeline: examples/validation-pipeline.md
+      - 树模型代理: examples/tree-surrogate.md
+      - 主动学习采样: examples/active-learning.md
 
 extra:
   social:
