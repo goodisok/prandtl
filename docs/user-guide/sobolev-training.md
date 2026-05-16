@@ -1,88 +1,75 @@
 # Sobolev 约束
 
-Sobolev 训练将**梯度匹配**作为训练约束，使代理模型不仅拟合输出值，还拟合输出对输入的偏导数 — 适用于已知物理梯度信息的场景。
+Sobolev 训练将**梯度匹配**作为训练约束，使 GP 代理模型不仅拟合输出值，还拟合输出对输入的偏导数 — 适用于已知物理梯度信息的场景（如 CFD 伴随求解器）。
 
-## GradientConstraint
+## soboloev 类
 
 ```python
-from prandtl import GradientConstraint
+from prandtl import soboloev
 
-constraint = GradientConstraint(
-    param_idx=0,           # 对第 0 个参数求梯度
-    grad_values=grad_data, # 梯度真值 (n_points,)
-    weight=0.1             # 约束权重
+mdl = soboloev(
+    params=["alpha", "mach"],
+    output="CL",
+    kernel="rbf",        # "rbf" 或 "matern52"
+    grad_weight=0.5      # 梯度约束权重 (0~1, 默认 0.5)
 )
 ```
+
+| 参数 | 说明 |
+|------|------|
+| `params` | 输入参数名列表 |
+| `output` | 输出变量名 |
+| `kernel` | GP 核函数：`"rbf"`（默认）或 `"matern52"` |
+| `grad_weight` | 梯度匹配在联合损失中的权重。0 = 标准 GP，1 = 纯梯度匹配 |
 
 ## 完整示例
 
 ```python
 import prandtl as pr
-from prandtl import GradientConstraint
 import numpy as np
 
-# 生成训练数据
-X, Y = pr.sample(
-    pr.analytical.cl_flat_plate,
-    bounds=[(-5, 15), (0.01, 0.1)],
-    n=100, method="lhs", seed=42
-)
+# 1. 已知梯度的真实函数
+def f(x):
+    """f(x) = sin(3x)，梯度 f'(x) = 3cos(3x)"""
+    return np.sin(3*x), 3*np.cos(3*x)
 
-# 计算梯度真值：CL 对 alpha 的导数
-# d(CL)/d(alpha) = d(2π(α + 2camber))/d(alpha) = 2π (常数)
-alpha_grad = 2 * np.pi * np.ones((100, 1))
+# 2. 生成训练数据（值 + 梯度）
+X = np.random.uniform(0, 2, (8, 1))
+Y, dY = f(X)
 
-# 构建 Sobolev 约束
-grad_constraint = GradientConstraint(
-    param_idx=0,
-    grad_values=alpha_grad,
-    weight=0.1
-)
+# 3. 训练 Sobolev GP
+mdl = pr.soboloev(params=["x"], output="y", kernel="rbf", grad_weight=0.5)
+mdl.fit(X, Y, dY)
 
-# 训练（仅 MLP 支持）
-surrogate = pr.Surrogate(
-    params=["alpha", "camber"],
-    outputs=["CL"],
-    method="mlp"
-)
-surrogate.fit(
-    X, Y,
-    physics=[grad_constraint],
-    n_iter=3000,
-    lr=0.001
-)
+# 4. 预测输出值
+y_pred, y_std = mdl.predict(np.array([[1.0]]))
 
-# 验证：模型不仅准确预测 CL，导数行为也符合物理
-Y_pred = surrogate.predict(X_test)
+# 5. 预测梯度（解析计算，非有限差分）
+grad_pred = mdl.predict_gradient(np.array([[1.0]]))
+
+print(f"预测值: {y_pred[0, 0]:.4f} ± {y_std[0, 0]:.4f}")
+print(f"预测梯度: {grad_pred[0, 0]:.4f}")
+print(f"真实梯度: {3*np.cos(3*1.0):.4f}")
 ```
 
-## 参数说明
+## 方法一览
 
-| 参数 | 说明 |
+| 方法 | 说明 |
 |------|------|
-| `param_idx` | 对哪个输入参数求偏导（从 0 开始） |
-| `grad_values` | 梯度目标值，形状 `(n_points,)` 或 `(n_points, 1)` |
-| `weight` | 梯度约束的权重（0.01–1.0）。权重越大，强制匹配越严格 |
+| `fit(X, Y, dY)` | 用函数值和梯度数据训练 |
+| `predict(X)` | 返回 `(mean, std)` |
+| `predict_gradient(X)` | 解析计算后验均值梯度，无需有限差分 |
 
 ## 应用场景
 
-- **已知解析梯度**：从理论/经验公式推导出导数关系
-- **伴随求解器**：CFD 伴随求解器可同时输出函数值和梯度
-- **物理一致性**：强制代理模型的导数行为与物理定律一致
+| 场景 | 梯度来源 |
+|------|----------|
+| CFD 伴随求解器 | 计算 ∂CL/∂α 和 ∂CL/∂Mach 几乎零成本 |
+| 已知解析函数 | 手动求导 |
+| 有限差分（备选） | 当伴随不可用时 |
 
-!!! warning "仅限 MLP"
-    `GradientConstraint` 基于自动微分，仅支持 `method="mlp"`。GP 和树模型后端不支持此约束。
+!!! warning "仅限 GP"
+    Sobolev 训练利用 GP 核函数的解析导数。MLP 和其他后端不支持此功能。
 
-## 与其他约束组合
-
-```python
-from prandtl import Monotonicity, BoundaryValue, GradientConstraint
-
-constraints = [
-    Monotonicity(param_idx=0, sign=1, weight=0.1),
-    BoundaryValue({"alpha": 0.0}, {"CL": 0.0}, weight=10.0),
-    GradientConstraint(param_idx=0, grad_values=alpha_grad, weight=0.05),
-]
-
-surrogate.fit(X, Y, physics=constraints, n_iter=5000, lr=0.001)
-```
+!!! tip "grad_weight 调节"
+    梯度数据有噪声时降低 `grad_weight`（如 0.1~0.3）。梯度质量高时可提高（0.7~0.9）以获得更好的导数精度。
