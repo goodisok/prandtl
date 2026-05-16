@@ -2,7 +2,9 @@
 
 CFD 代理模型工具包。几行代码训练气动预测的快速代理模型——API 风格和 scikit-learn 一样直觉。
 
-[English](../README.md) | **中文**
+[English](README.md) | **中文**
+
+📖 **[完整文档](https://goodisok.github.io/prandtl/)** — 安装指南、用户手册、API 参考、示例
 
 ```python
 import prandtl as pr
