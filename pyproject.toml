@@ -3,8 +3,8 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "prandtl"
-version = "0.2.0"
+name = "prandtl-cfd"
+version = "0.3.0"
 description = "CFD surrogate modeling toolkit — train, validate, and export surrogate models for aerodynamic predictions."
 license = {text = "MIT"}
 readme = "README.md"
