@@ -1,0 +1,85 @@
+site_name: Prandtl
+site_description: CFD surrogate modeling toolkit — train fast aerodynamic surrogates with a scikit-learn-like API
+site_author: goodisok
+repo_url: https://github.com/goodisok/prandtl
+repo_name: goodisok/prandtl
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to light mode
+    - scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            heading_level: 2
+
+nav:
+  - Home: index.md
+  - Installation: install.md
+  - User Guide:
+      - Quick Start: user-guide/quickstart.md
+      - Sampling: user-guide/sampling.md
+      - Training: user-guide/training.md
+      - Validation: user-guide/validation.md
+      - Physics Constraints: user-guide/physics.md
+      - Export: user-guide/export.md
+      - CFD Data I/O: user-guide/io.md
+  - API Reference:
+      - Surrogate: api/surrogate.md
+      - Validation: api/validation.md
+      - Physics: api/physics.md
+      - Sampling: api/sampling.md
+      - I/O: api/io.md
+      - Analytical: api/analytical.md
+  - Examples:
+      - Thin Airfoil: examples/flat-plate.md
+      - Multi-Output: examples/multi-output.md
+      - Physics-Constrained: examples/physics-constrained.md
+      - Full Validation Pipeline: examples/validation-pipeline.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/goodisok/prandtl
